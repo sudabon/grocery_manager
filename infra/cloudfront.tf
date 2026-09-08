@@ -5,7 +5,9 @@ resource "aws_cloudfront_origin_access_control" "app" {
   signing_protocol                  = "sigv4"
 }
 
-# 最低 TTL を 0 にして、S3 の no-cache を尊重する。
+# min_ttl を 0 にして、deploy.sh がエントリポイントへ付ける no-cache を尊重する。
+# マネージドの Managed-CachingOptimized は min_ttl が 1 秒で、no-cache でも 1 秒
+# キャッシュされてしまうため使えない。
 resource "aws_cloudfront_cache_policy" "app" {
   name        = "${var.app_name}-origin-cache-control"
   comment     = "Revalidate entrypoints; cache content-hashed assets for up to one year"

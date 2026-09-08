@@ -401,11 +401,15 @@ interface AppSettings {
 
 ## 13. ディレクトリ構成
 
+M4 までを実装しきった時点の**目標構成**。現在のリポジトリは M0 のみを実装しており、
+`src/` 以下は存在しない（実際の構成は各 change の tasks.md を参照）。
+
 ```
-quadmemo/
+<リポジトリルート>
 ├── public/
-│   └── icons/
-├── src/
+│   ├── icons/                # M2 以降
+│   └── placeholder/          # M0: 「準備中」ページ（Vite 導入時に置き換え）
+├── src/                      # M1 以降
 │   ├── core/                 # UI非依存・テスト対象
 │   │   ├── tokenize.ts
 │   │   ├── normalize.ts
@@ -430,10 +434,11 @@ quadmemo/
 │   │   └── SettingsPage.tsx
 │   ├── App.tsx
 │   └── main.tsx
-├── index.html
-├── vite.config.ts            # vite-plugin-pwa設定
+├── index.html                # M1 以降（Vite のエントリ）
+├── vite.config.ts            # M1 以降（vite-plugin-pwa設定）
 ├── package.json
-├── infra/                    # Terraform一式（§16）
+├── playwright.config.ts      # M0: 配信 E2E（chromium / mobile-safari）
+├── infra/                    # M0: Terraform一式（§16）
 │   ├── versions.tf
 │   ├── providers.tf
 │   ├── variables.tf
@@ -441,8 +446,16 @@ quadmemo/
 │   ├── s3.tf
 │   ├── cloudfront.tf
 │   └── outputs.tf
-└── scripts/
-    └── deploy.sh             # ビルド→S3同期→キャッシュ無効化（§16.5）
+├── openspec/                 # 仕様・change の単一の正
+├── scripts/
+│   ├── deploy.sh             # M0: ビルド→S3同期→キャッシュ無効化（§16.5）
+│   ├── build-placeholder.mjs # M0: Vite 導入までの暫定ビルド
+│   ├── check-test-plan.sh    # M0: test-plan と E2E タグの対応検証
+│   ├── e2e-report.mjs        # M0: E2E 結果の集計
+│   └── has-removed-assets.mjs
+└── tests/
+    ├── e2e/                  # Playwright（fixtures / pages / *.spec.ts）
+    └── scripts/              # scripts/ の node:test 検証
 ```
 
 ## 14. 開発マイルストーン
@@ -488,245 +501,27 @@ DNSは外部レジストラで管理し、サブドメイン（例: `quadmemo.ex
 
 ### 16.2 Terraformコード
 
-#### versions.tf
+実装の正本は [infra/](infra/)。ファイル構成と役割は次のとおり。
 
-```hcl
-terraform {
-  required_version = ">= 1.10"
+| ファイル | 役割 |
+|----------|------|
+| [versions.tf](infra/versions.tf) | `required_version` / プロバイダ制約 / S3 バックエンド（バケット名は部分設定） |
+| [providers.tf](infra/providers.tf) | 既定リージョンと ACM 用 `us-east-1` エイリアス、`aws_caller_identity` |
+| [variables.tf](infra/variables.tf) | `app_name` / `domain_name` とその検証条件 |
+| [acm.tf](infra/acm.tf) | 証明書（DNS 検証）と ISSUED 待ち |
+| [s3.tf](infra/s3.tf) | 非公開バケット、パブリックアクセスブロック、OAC 向けバケットポリシー |
+| [cloudfront.tf](infra/cloudfront.tf) | OAC、カスタムキャッシュポリシー、ディストリビューション、403/404 フォールバック |
+| [outputs.tf](infra/outputs.tf) | 検証用 CNAME、配信ドメイン名、ディストリビューション ID、配信用バケット名 |
 
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 6.0"
-    }
-  }
-
-  backend "s3" {
-    bucket       = "<tfstate用バケット名>"   # 事前に手動作成（バージョニング有効）
-    key          = "quadmemo/terraform.tfstate"
-    region       = "ap-northeast-1"
-    use_lockfile = true
-  }
-}
-```
-
-#### providers.tf
-
-```hcl
-provider "aws" {
-  region = "ap-northeast-1"
-}
-
-# CloudFrontに紐づけるACM証明書はus-east-1でのみ発行可能
-provider "aws" {
-  alias  = "us_east_1"
-  region = "us-east-1"
-}
-
-data "aws_caller_identity" "current" {}
-```
-
-#### variables.tf
-
-```hcl
-variable "app_name" {
-  type    = string
-  default = "quadmemo"
-}
-
-variable "domain_name" {
-  type        = string
-  description = "配信用サブドメイン（例: quadmemo.example.com）"
-}
-```
-
-#### acm.tf
-
-```hcl
-resource "aws_acm_certificate" "app" {
-  provider          = aws.us_east_1
-  domain_name       = var.domain_name
-  validation_method = "DNS"
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# 検証用CNAMEをレジストラに登録した後、発行完了（ISSUED）まで待機する。
-# validation_record_fqdnsはRoute 53管理時のみ必要。外部DNSの場合は省略し、
-# ステータスのポーリングのみ行わせる（デフォルトタイムアウト75分）。
-resource "aws_acm_certificate_validation" "app" {
-  provider        = aws.us_east_1
-  certificate_arn = aws_acm_certificate.app.arn
-}
-```
-
-#### s3.tf
-
-```hcl
-resource "aws_s3_bucket" "app" {
-  bucket = "${var.app_name}-app-${data.aws_caller_identity.current.account_id}"
-}
-
-resource "aws_s3_bucket_public_access_block" "app" {
-  bucket                  = aws_s3_bucket.app.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-# CloudFront（OAC）からのGetObjectのみ許可
-data "aws_iam_policy_document" "app_bucket" {
-  statement {
-    sid       = "AllowCloudFrontOAC"
-    actions   = ["s3:GetObject"]
-    resources = ["${aws_s3_bucket.app.arn}/*"]
-
-    principals {
-      type        = "Service"
-      identifiers = ["cloudfront.amazonaws.com"]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "AWS:SourceArn"
-      values   = [aws_cloudfront_distribution.app.arn]
-    }
-  }
-}
-
-resource "aws_s3_bucket_policy" "app" {
-  bucket = aws_s3_bucket.app.id
-  policy = data.aws_iam_policy_document.app_bucket.json
-}
-```
-
-#### cloudfront.tf
-
-```hcl
-resource "aws_cloudfront_origin_access_control" "app" {
-  name                              = var.app_name
-  origin_access_control_origin_type = "s3"
-  signing_behavior                  = "always"
-  signing_protocol                  = "sigv4"
-}
-
-# no-cache を尊重し、ヘッダー未指定でもキャッシュしない
-resource "aws_cloudfront_cache_policy" "app" {
-  name        = "${var.app_name}-origin-cache-control"
-  min_ttl     = 0
-  default_ttl = 0
-  max_ttl     = 31536000
-
-  parameters_in_cache_key_and_forwarded_to_origin {
-    enable_accept_encoding_gzip   = true
-    enable_accept_encoding_brotli = true
-
-    cookies_config {
-      cookie_behavior = "none"
-    }
-    headers_config {
-      header_behavior = "none"
-    }
-    query_strings_config {
-      query_string_behavior = "none"
-    }
-  }
-}
-
-data "aws_cloudfront_response_headers_policy" "security_headers" {
-  name = "Managed-SecurityHeadersPolicy"
-}
-
-resource "aws_cloudfront_distribution" "app" {
-  enabled             = true
-  is_ipv6_enabled     = true
-  comment             = var.app_name
-  default_root_object = "index.html"
-  aliases             = [var.domain_name]
-  price_class         = "PriceClass_200" # 日本を含む
-
-  origin {
-    domain_name              = aws_s3_bucket.app.bucket_regional_domain_name
-    origin_id                = "s3-app"
-    origin_access_control_id = aws_cloudfront_origin_access_control.app.id
-  }
-
-  default_cache_behavior {
-    target_origin_id           = "s3-app"
-    viewer_protocol_policy     = "redirect-to-https"
-    allowed_methods            = ["GET", "HEAD"]
-    cached_methods             = ["GET", "HEAD"]
-    compress                   = true
-    cache_policy_id            = aws_cloudfront_cache_policy.app.id
-    response_headers_policy_id = data.aws_cloudfront_response_headers_policy.security_headers.id
-  }
-
-  # SPAルーティング対策: /dictionaries 等の直リンク・リロードをindex.htmlへ
-  custom_error_response {
-    error_code            = 403
-    response_code         = 200
-    response_page_path    = "/index.html"
-    error_caching_min_ttl = 0
-  }
-
-  custom_error_response {
-    error_code            = 404
-    response_code         = 200
-    response_page_path    = "/index.html"
-    error_caching_min_ttl = 0
-  }
-
-  restrictions {
-    geo_restriction {
-      restriction_type = "none"
-    }
-  }
-
-  viewer_certificate {
-    acm_certificate_arn      = aws_acm_certificate_validation.app.certificate_arn
-    ssl_support_method       = "sni-only"
-    minimum_protocol_version = "TLSv1.2_2021"
-  }
-}
-```
+設計判断の理由は
+[openspec/changes/setup-quadmemo-hosting/design.md](openspec/changes/setup-quadmemo-hosting/design.md)
+を参照。ここでは HCL を転記せず、キャッシュ制御の方針のみ再掲する。
 
 > カスタムポリシーの最低・既定 TTL は 0 秒、最大 TTL は 31536000 秒とし、
 > 実際のキャッシュ制御はデプロイ時に S3 オブジェクトへ付与するヘッダー（§16.5）で行う。
 > `Managed-CachingOptimized` は `no-cache` でも最低 1 秒キャッシュするため使用しない。
 > 403/404 フォールバックのエラー TTL は 0 秒とするが、S3 に対して AWS が適用する最小 1 秒のエッジキャッシュのみ許容する。
 > この例外は通常のエントリポイント応答には適用せず、ブラウザには `no-cache` を返す。
-
-#### outputs.tf
-
-```hcl
-output "acm_validation_records" {
-  description = "レジストラに登録する証明書検証用CNAME"
-  value = {
-    for o in aws_acm_certificate.app.domain_validation_options :
-    o.domain_name => {
-      name  = o.resource_record_name
-      type  = o.resource_record_type
-      value = o.resource_record_value
-    }
-  }
-}
-
-output "cloudfront_domain_name" {
-  description = "レジストラでサブドメインのCNAME先に設定する値"
-  value       = aws_cloudfront_distribution.app.domain_name
-}
-
-output "cloudfront_distribution_id" {
-  value = aws_cloudfront_distribution.app.id
-}
-
-output "app_bucket" {
-  value = aws_s3_bucket.app.id
-}
-```
 
 ### 16.3 構築手順（初回のみ）
 

@@ -6,6 +6,7 @@ export default defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile-safari', use: { ...devices['iPhone 13'] } },
   ],
+  forbidOnly: !!process.env.CI,
   retries: 1, // リトライ成功 = フレークとして記録される
   reporter: [
     ['list'],
@@ -13,6 +14,5 @@ export default defineConfig({
   ],
   use: {
     trace: 'on-first-retry',
-    baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:3000',
   },
 });

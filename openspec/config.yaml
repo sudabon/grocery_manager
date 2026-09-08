@@ -1,0 +1,7 @@
+schema: spec-driven-e2e
+
+# --- openspec-e2e-kit ---
+context: |
+  E2Eテスト: Playwright。実装規約は .claude/skills/e2e-conventions/SKILL.md に従う。
+  テストには必ず @<change-id> と @TP-NNN タグを付ける。
+# --- /openspec-e2e-kit ---

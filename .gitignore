@@ -23,6 +23,11 @@ dist/
 test-results/
 playwright-report/
 
+# Environment configuration (実値は .env に置く。.env.example のみ追跡する)
+.env
+.env.*
+!.env.example
+
 # Terraform local state and environment configuration
 .terraform/
 *.tfvars

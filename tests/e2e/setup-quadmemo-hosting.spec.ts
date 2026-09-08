@@ -29,6 +29,7 @@ test('辞書画面へ直リンクすると 200 でアプリシェルが表示さ
 }, async ({ appShell }) => {
   const response = await appShell.goto('/dictionaries');
   expect(response?.status()).toBe(200);
+  expect(await response?.headerValue('cache-control')).toMatch(/\bno-cache\b/i);
   await appShell.expectPath('/dictionaries');
   await appShell.expectVisible();
 });
