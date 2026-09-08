@@ -4,11 +4,11 @@
 
 ## QuadMemo
 
-iPhone のホーム画面から使うメモ PWA。現在は M0 のホスティング基盤と「準備中」のプレースホルダーを実装しています。メモ UI・分類・辞書・オフライン対応は後続の OpenSpec change で実装します。
+iPhone 向けの4象限メモアプリ。ホスティング基盤と、入力した単語をチップとして並べるメモ UI を実装しています。分類・永続化・辞書編集・PWA/オフライン対応は後続の OpenSpec change で実装します。
 
 ## ローカルでの確認
 
-Node.js 20 以上（`package.json` の `engines` で指定）と npm を用意し、リポジトリのルートで実行します。
+Node.js 24.15 以上（24.x）または 26 以上（詳細は `package.json` の `engines`）と npm を用意し、リポジトリのルートで実行します。
 
 ```bash
 npm ci
@@ -16,7 +16,7 @@ npm run build
 npx playwright install chromium webkit
 ```
 
-`public/placeholder/index.html` をブラウザで開くと QuadMemo / 準備中を表示します。`npm run build` はこのディレクトリを `dist/` にコピーします。後続の UI change で Vite ビルドに置き換えます。
+`npm run dev` で http://localhost:3000 を開けます。`npm run build` は型チェック後に Vite で `dist/` を生成します。開発・テストの詳細は末尾の「アプリの開発」を参照してください。
 
 ## 配信構成
 
@@ -138,7 +138,7 @@ curl -sI "http://$TF_VAR_domain_name/"
 
 HTTPS は 200、`Cache-Control: no-cache`、`X-Content-Type-Options: nosniff`、HSTS、`X-Frame-Options` を確認します。HTTP は HTTPS へのリダイレクトを確認します。`terraform -chdir=infra output -raw app_bucket` で取得したバケット名を用い、`http://<バケット名>.s3.ap-northeast-1.amazonaws.com/index.html` への匿名アクセスが 403 になることも確認します。
 
-更新確認はプレースホルダーの本文を 1 行変更して再デプロイし、ルートと `/settings` のリロードで変更を確認します。削除確認は不要になった検証用ファイルを成果物から削除して再デプロイし、`aws s3 ls` で削除を確認します。SPA フォールバックがあるため、削除 URL は 404 ではなくアプリシェルの 200 になります。ハッシュ付きアセット導入後は `aws s3api head-object --bucket <バケット名> --key <アセットのキー>` で長期キャッシュヘッダーも確認します。
+更新確認はアプリの本文を 1 行変更して再デプロイし、ルートと `/settings` のリロードで変更を確認します。削除確認は不要になった検証用ファイルを成果物から削除して再デプロイし、`aws s3 ls` で削除を確認します。SPA フォールバックがあるため、削除 URL は 404 ではなくアプリシェルの 200 になります。ハッシュ付きアセット導入後は `aws s3api head-object --bucket <バケット名> --key <アセットのキー>` で長期キャッシュヘッダーも確認します。
 
 ## 検証
 
@@ -159,11 +159,11 @@ terraform -chdir=infra init -backend=false
 terraform -chdir=infra validate
 terraform fmt -check -recursive infra
 bash -n scripts/deploy.sh
-npm test
+npm run test:scripts
 bash scripts/check-test-plan.sh --change setup-quadmemo-hosting
 ```
 
-`npm test` は `tests/scripts/` のスクリプト検証を実行します。`check-test-plan.sh` は引数なしなら `origin/main...HEAD` の差分を確認しますが、`openspec/` が git 管理下にない間は差分ベースの検証が成立しないため exit 2 になります。未コミットの change を確認する場合は `--change` を使います。Terraform の backend 無効での検証後、実環境へ適用する際は通常の `terraform init` を実行してください。
+`npm run test:scripts` は `tests/scripts/` のスクリプト検証を実行します。`check-test-plan.sh` は引数なしなら `origin/main...HEAD` の差分を確認しますが、`openspec/` が git 管理下にない間は差分ベースの検証が成立しないため exit 2 になります。差分モードは CI（新規チェックアウト）と同じ結果になるよう `HEAD` のコミット済みツリーを参照するため、未追跡のまま残った `test-plan.md` や E2E テストはコミット漏れとして報告します。未コミットの change を確認する場合は、作業ツリーを参照する `--change` を使います。`tasks.md` にチェック済みタスクが 1 つも無い未着手の change は、実装が存在しないため `@<change-id>` の E2E テストを要求せず `Pending:` として報告します（`test-plan.md` は提案時の成果物なので必須です）。1 つでもチェックが付いた時点で E2E タグが必須になります。Terraform の backend 無効での検証後、実環境へ適用する際は通常の `terraform init` を実行してください。
 
 ## 仕様
 
@@ -172,3 +172,30 @@ bash scripts/check-test-plan.sh --change setup-quadmemo-hosting
 - [受け入れ仕様](openspec/changes/setup-quadmemo-hosting/specs/static-hosting/spec.md)
 - [E2E 検証計画](openspec/changes/setup-quadmemo-hosting/test-plan.md)
 - [実装・実環境検証の進捗](openspec/changes/setup-quadmemo-hosting/tasks.md)
+
+## アプリの開発
+
+Node.js 24.15 以上（24.x）または 26 以上で依存を導入し、ポート 3000 の開発サーバーを起動します。
+
+```bash
+npm ci
+npm run dev
+```
+
+`/` はメモボード、`/dictionaries` は辞書編集、`/settings` は設定です。
+辞書編集と設定は現在、見出しと戻るリンクのみです。入力した単語はすべて Q4 に入り、
+チップをタップすると移動・編集・削除できます。チップはメモリ上で保持し、リロードすると消えます。
+音声入力は入力バーを開いた後、OS キーボードのマイクキーを使います。
+
+```bash
+npm run build          # 型チェック + dist/ にハッシュ付きアセットを生成
+npm run preview        # ビルド成果物をポート 3000 で確認
+npm test               # Vitest: トークン化・ストア・入力制御・UI
+npm run test:scripts   # 既存の配信/検証スクリプトの回帰テスト
+npx playwright install chromium webkit
+npx playwright test --grep @add-quadmemo-quadrant-ui
+bash scripts/check-test-plan.sh --change add-quadmemo-quadrant-ui
+```
+
+`E2E_BASE_URL` 未指定時は Playwright が開発サーバーを起動します。指定時はその URL を使用します。
+iPhone のキーボード、音声入力、セーフエリアと 1000 件時の操作感は実機で確認します。

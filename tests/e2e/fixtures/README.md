@@ -7,6 +7,10 @@ test-plan.md の「前提(fixture)」列に書いた fixture 名は、必ずこ�
 
 | fixture 名 | 作られる状態 | 使用する TP-ID | 方式 |
 |-----------|-------------|---------------|------|
+| `seed:empty-board` | メモリ上の空のボードをページロードで用意する (`memo`) | add-quadmemo-quadrant-ui: TP-001〜TP-028 | fixture 直接方式 |
+| `env:no-intl-segmenter` | addInitScript で Intl.Segmenter を無効化して開く (`noSegmenter`) | add-quadmemo-quadrant-ui: TP-012 | fixture 直接方式 |
+| `env:reduced-motion` | reducedMotion: reduce で開く (`reducedMotionBoard`) | add-quadmemo-quadrant-ui: TP-027 | fixture 直接方式 |
+| `env:no-dialog` | showModal を無効化してフォールバックを検証 (`noDialog`) | add-quadmemo-quadrant-ui: TP-026 | fixture 直接方式 |
 | `env:deployed-origin` | `E2E_BASE_URL` の HTTPS 配信先を使用。未指定・HTTP 指定・パス/クエリ/ハッシュを含む指定の場合はネットワークアクセス前に skip。データ変更なし | setup-quadmemo-hosting: TP-001〜TP-006 | fixture 直接方式 |
 
 `env:deployed-origin` は `deployed-origin.ts` の自動 fixture `deployedOrigin` が実装する。
@@ -24,3 +28,5 @@ QuadMemo はサーバーサイドを持たず状態は端末内にしかない�
 後続 change（`add-quadmemo-quadrant-ui` design - D10 ほか）もこの方式を前提に設計されている。
 
 fixture は各テストの前にべき等に状態を作り直し、テスト間で状態を共有しないこと。
+
+ボード用 fixture は `memo-board.ts` に定義。サーバーを持たずシードAPIを設置できないため、design.md D10 に従いページロードとブラウザ環境設定で準備する。
