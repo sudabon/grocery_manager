@@ -12,7 +12,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, section:focus-visibl
 .app-header h1 { margin: 0; font-size: 1.2rem; letter-spacing: -.04em; font-weight: 650; }
 .app-header a { width: fit-content; font-size: .875rem; padding-block: 12px; text-decoration: none; }
 .app-header a:last-child { justify-self: end; }
-.memo-page { flex: 1; min-height: 0; display: flex; padding-bottom: calc(168px + env(safe-area-inset-bottom)); }
+.memo-page { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-bottom: calc(168px + env(safe-area-inset-bottom)); }
 .quadrant-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); flex: 1; min-width: 0; min-height: 0; gap: 1px; background: #bfc8bf; border-bottom: 1px solid #bfc8bf; }
 .quadrant { min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; padding: 18px; background: #f6f5f0; scrollbar-width: thin; }
 .q1 { background: #eff3ed; } .q2 { background: #f8f3e9; } .q3 { background: #f2efea; } .q4 { background: #eef1f2; }
@@ -55,3 +55,10 @@ button:disabled { opacity: .45; cursor: default; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 @media (max-width: 420px) { .quadrant { padding: 12px; } .quadrant h2 { gap: 6px; } .chip { padding: 7px 10px; } }
 @media (prefers-reduced-motion: reduce) { .chip { animation: none; } }
+
+.chip-highlighted { outline: 3px solid #966b22; outline-offset: 2px; background: #fff0c7; }
+.chip-unsaved { box-shadow: inset 0 -2px #f6ca70; }
+.storage-banner { display: flex; flex: none; align-items: center; gap: 12px; padding: 10px 16px; background: #493922; color: #ffe6b8; font-size: 13px; }
+.storage-banner p { margin: 0; }
+.storage-banner button { flex-shrink: 0; min-height: 44px; padding: 8px 12px; color: #283c35; background: #fffdf8; border: 1px solid #c5cbc4; border-radius: 8px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }

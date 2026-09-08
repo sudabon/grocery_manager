@@ -14,6 +14,14 @@ export class MemoBoardPage {
   quadrant(id: number) { return this.board.getByRole('region', { name: new RegExp(`^Q${id} `) }); }
   quadrantChips(id: number) { return this.quadrant(id).getByRole('button', { name: /^メモ「/ }); }
   chip(text: string) { return this.board.getByRole('button', { name: `メモ「${text}」（未分類）`, exact: true }); }
+  classifiedChip(text: string) { return this.board.getByRole('button', { name: `メモ「${text}」`, exact: true }); }
+  unsavedChip(text: string) { return this.board.getByRole('button', { name: `メモ「${text}」（未分類）（未保存）`, exact: true }); }
+  highlightedChip(text: string) { return this.board.getByRole('button', { name: `メモ「${text}」（重複のため追加をスキップ）`, exact: true }); }
+  get storageBanner() { return this.page.getByRole('complementary', { name: '保存できない環境の案内' }); }
+  async closeStorageBanner() { await this.storageBanner.getByRole('button', { name: '保存の案内を閉じる' }).click(); }
+  async reload() { await this.page.reload(); await expect(this.board).toBeVisible(); }
+  async waitForSave() { await expect(this.page.getByText('保存処理完了', { exact: true })).toBeAttached(); }
+  async openClassifiedChip(text: string) { await this.classifiedChip(text).click(); await expect(this.sheet).toBeVisible(); }
   moveButton(id: number) { return this.sheet.getByRole('button', { name: new RegExp(`^Q${id} .+へ移動$`) }); }
   goto() { return this.page.goto('/'); }
   async start() { await this.mic.click(); await expect(this.input).toBeFocused(); }

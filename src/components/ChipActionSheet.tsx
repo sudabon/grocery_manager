@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { quadrantLabels, useAppStore, type QuadrantId } from '../store/useAppStore';
+import { useAppStore } from '../store/useAppStore';
 
 export function ChipActionSheet({ id, onClose }: { id: string; onClose: () => void }) {
   const chip = useAppStore((state) => state.chips.find((item) => item.id === id));
+  const dictionaries = useAppStore((state) => state.dictionaries);
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(chip?.rawText ?? '');
   const sheet = useRef<HTMLDialogElement | HTMLDivElement | null>(null);
@@ -59,10 +60,10 @@ export function ChipActionSheet({ id, onClose }: { id: string; onClose: () => vo
         onKeyDown={(event) => { if (event.key === 'Enter' && (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229)) event.preventDefault(); }} />
       <button type="submit" className="commit-button">編集を確定</button>
     </form> : <>
-      <div className="move-actions">{(Object.keys(quadrantLabels) as QuadrantId[]).map((quadrant) =>
+      <div className="move-actions">{dictionaries.map(({ quadrant, label }) =>
         <button key={quadrant} type="button" disabled={chip.quadrant === quadrant} onClick={() => {
           useAppStore.getState().moveChip(id, quadrant); onClose();
-        }}>{quadrant.toUpperCase()} {quadrantLabels[quadrant]}へ移動</button>)}</div>
+        }}>{quadrant.toUpperCase()} {label}へ移動</button>)}</div>
       <div className="sheet-actions"><button type="button" onClick={() => setEditing(true)}>編集</button>
         <button type="button" className="danger" onClick={() => { useAppStore.getState().removeChip(id); onClose(); }}>削除</button></div>
     </>}
