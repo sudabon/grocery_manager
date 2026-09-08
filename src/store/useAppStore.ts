@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { buildNormalizedDicts, type NormalizedDicts, type QuadrantId } from '../core/classify';
+import { sanitizeEntries } from '../core/dictEntries';
+import { clampAutoCommitMs } from '../core/settings';
+import { skipExistingMemos, type AppData } from '../core/portability';
 import { normalize } from '../core/normalize';
 import { defaultSettings, seedDictionaries } from '../db/defaults';
 import { repository, requestPersistence, type PersistencePermission, type Repository } from '../db/repository';
@@ -24,6 +27,9 @@ interface AppStore {
   editChip: (id: string, text: string) => Promise<void>;
   removeChip: (id: string) => Promise<void>;
   clearAll: () => Promise<void>;
+  saveDictionary: (quadrant: QuadrantId, label: string, rawText: string) => Promise<boolean>;
+  updateSettings: (patch: Partial<Omit<AppSettings, 'key'>>) => Promise<boolean>;
+  importData: (data: AppData | { dictionaries: Dictionary[] }) => Promise<boolean>;
 }
 // Strip transient display flags before writing a memo back to IndexedDB.
 function persisted(chip: ChipItem): MemoItem {
@@ -54,6 +60,18 @@ export function createAppStore(repo: Repository = repository, persist = requestP
         }
       }).finally(() => set((state) => ({ pendingWrites: state.pendingWrites - 1 })));
       return writeQueue;
+    }
+    function apply(operation: () => Promise<void>): Promise<boolean> {
+      set((state) => ({ pendingWrites: state.pendingWrites + 1 }));
+      const result = writeQueue.then(async () => {
+        try { await operation(); return true; }
+        catch {
+          set((state) => ({ saveErrors: [...state.saveErrors, { text: '保存できませんでした。変更は端末に保存されていません。' }] }));
+          return false;
+        }
+      }).finally(() => set((state) => ({ pendingWrites: state.pendingWrites - 1 })));
+      writeQueue = result.then(() => {});
+      return result;
     }
     function highlight(id: string) {
       clearTimeout(highlights.get(id));
@@ -130,6 +148,26 @@ export function createAppStore(repo: Repository = repository, persist = requestP
         set({ chips: [] });
         return save(() => repo.clearMemos(), []);
       },
+      saveDictionary: (quadrant, label, rawText) => apply(async () => {
+        const dictionary = { quadrant, label, entries: sanitizeEntries(rawText), updatedAt: Date.now() };
+        await repo.saveDictionary(dictionary);
+        const dictionaries = get().dictionaries.map((d) => d.quadrant === quadrant ? dictionary : d);
+        set({ dictionaries, normalizedDicts: buildNormalizedDicts(dictionaries) });
+      }),
+      updateSettings: (patch) => apply(async () => {
+        const settings = { ...get().settings, ...patch };
+        settings.autoCommitMs = clampAutoCommitMs(settings.autoCommitMs);
+        await repo.saveSettings(settings);
+        set({ settings });
+      }),
+      importData: (input) => apply(async () => {
+        const data = await repo.applyImport(input);
+        set((state) => ({ dictionaries: data.dictionaries, normalizedDicts: buildNormalizedDicts(data.dictionaries),
+          ...('memos' in input ? { settings: data.settings,
+            chips: [...state.chips, ...skipExistingMemos(data.memos, state.chips.map((chip) => chip.id))]
+              .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)) } : {}),
+        }));
+      }),
     };
   });
 }

@@ -1,0 +1,66 @@
+{
+  "app": "quadmemo",
+  "schemaVersion": 1,
+  "exportedAt": "2026-09-08T00:00:00Z",
+  "dictionaries": [
+    {
+      "quadrant": "q1",
+      "label": "企画",
+      "entries": [
+        "orange"
+      ],
+      "updatedAt": 1
+    },
+    {
+      "quadrant": "q2",
+      "label": "暮らし",
+      "entries": [
+        "ぱん"
+      ],
+      "updatedAt": 1
+    },
+    {
+      "quadrant": "q3",
+      "label": "食品",
+      "entries": [
+        "牛乳"
+      ],
+      "updatedAt": 1
+    },
+    {
+      "quadrant": "q4",
+      "label": "保留",
+      "entries": [],
+      "updatedAt": 1
+    }
+  ],
+  "memos": [
+    {
+      "id": "01J00000000000000000000001",
+      "rawText": "apple",
+      "normText": "apple",
+      "quadrant": "q1",
+      "matchedEntry": "apple",
+      "autoClassified": true,
+      "createdAt": 1,
+      "updatedAt": 1
+    },
+    {
+      "id": "new-memo",
+      "rawText": "orange",
+      "normText": "orange",
+      "quadrant": "q1",
+      "matchedEntry": "orange",
+      "autoClassified": true,
+      "createdAt": 1,
+      "updatedAt": 1
+    }
+  ],
+  "settings": {
+    "key": "app",
+    "partialMatch": true,
+    "autoCommitMs": 700,
+    "allowDuplicates": false,
+    "showDictationHint": false
+  }
+}

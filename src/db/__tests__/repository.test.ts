@@ -92,3 +92,35 @@ it('非対応・要求拒否を処理する', async () => {
   vi.stubGlobal('navigator', { storage: { persist: vi.fn().mockRejectedValue(new Error('denied')) } });
   expect(await requestPersistence()).toBe('denied');
 });
+it('全データの一括取得とID衝突をスキップする一括適用', async () => {
+  await repo.seed(); await repo.putMemos([memo('a')]);
+  const before = await repo.getAllData();
+  const input = { ...before, settings: { ...defaultSettings, partialMatch: true },
+    dictionaries: before.dictionaries.map((d) => ({ ...d, label: '新ラベル' })),
+    memos: [{ ...memo('a'), rawText: '上書き禁止' }, memo('b'), memo('b')] };
+  await repo.applyImport(input);
+  expect((await repo.getAllData()).memos).toEqual([memo('a'), memo('b')]);
+  expect(await repo.getSettings()).toMatchObject({ partialMatch: true });
+  expect((await repo.getDictionaries())[0].label).toBe('新ラベル');
+  await repo.clearMemos();
+  expect(await repo.getDictionaries()).toEqual(input.dictionaries);
+  expect(await repo.getSettings()).toEqual(input.settings);
+});
+it('インポート検証失敗とトランザクション途中の失敗は全ストア無変更', async () => {
+  await repo.seed(); await repo.putMemos([memo('a')]);
+  const before = await repo.getAllData();
+  await expect(repo.applyImport({ ...before, memos: [{ ...memo('b'), quadrant: 'q5' } as unknown as MemoItem] })).rejects.toThrow();
+  expect(await repo.getAllData()).toEqual(before);
+  // Fail the last store after dictionaries and settings have already been written.
+  const add = vi.spyOn(IDBObjectStore.prototype, 'add').mockImplementationOnce(() => { throw new DOMException('quota', 'QuotaExceededError'); });
+  await expect(repo.applyImport({ ...before, dictionaries: before.dictionaries.map((d) => ({ ...d, label: '失敗' })),
+    settings: { ...defaultSettings, partialMatch: true }, memos: [memo('b')] })).rejects.toThrow();
+  add.mockRestore();
+  expect(await repo.getAllData()).toEqual(before);
+});
+it('辞書のみのインポートはメモと設定へ書き込まない', async () => {
+  await repo.seed(); await repo.putMemos([memo('a')]);
+  const before = await repo.getAllData();
+  await repo.applyImport({ dictionaries: before.dictionaries.map((d) => ({ ...d, entries: [] })) });
+  expect(await repo.getMemos()).toEqual(before.memos); expect(await repo.getSettings()).toEqual(before.settings);
+});

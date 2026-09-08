@@ -8,6 +8,7 @@ let repo: Repository;
 let store: ReturnType<typeof createAppStore>;
 beforeEach(() => {
   repo = {
+    getAllData: vi.fn(), applyImport: vi.fn(),
     getMemos: vi.fn().mockResolvedValue([]), putMemos: vi.fn().mockResolvedValue(undefined),
     removeMemo: vi.fn().mockResolvedValue(undefined), clearMemos: vi.fn().mockResolvedValue(undefined),
     getDictionaries: vi.fn().mockResolvedValue(seedDictionaries()), saveDictionary: vi.fn(),
@@ -97,4 +98,31 @@ it('重複OFFは正規化して同象限と一括入力内で抑止し一時強�
   expect(store.getState().chips[0].highlighted).toBe(true);
   expect(vi.mocked(repo.putMemos).mock.calls[0][0]).toHaveLength(2);
   await vi.advanceTimersByTimeAsync(1800); expect(store.getState().chips[0].highlighted).toBe(false);
+});
+it('辞書保存は成功後だけキャッシュを更新し既存メモは変更しない', async () => {
+  await store.getState().initialize(); await store.getState().addChips([chip('a')]);
+  const before = store.getState().chips;
+  expect(await store.getState().saveDictionary('q1', '企画', 'パン\nぱん')).toBe(true);
+  expect(store.getState().dictionaries[0]).toMatchObject({ label: '企画', entries: ['パン'] });
+  expect(store.getState().normalizedDicts.exact.get('ぱん')?.[0].quadrant).toBe('q1');
+  expect(store.getState().chips).toEqual(before);
+  expect(repo.putMemos).toHaveBeenCalledTimes(1);
+  vi.mocked(repo.saveDictionary).mockRejectedValueOnce(new Error('quota'));
+  expect(await store.getState().saveDictionary('q1', '失敗', '失敗')).toBe(false);
+  expect(store.getState().dictionaries[0].label).toBe('企画'); expect(store.getState().saveErrors).toHaveLength(1);
+});
+it('設定の連続保存で他の設定を失わず失敗時は保存済みの値を維持する', async () => {
+  await Promise.all([store.getState().updateSettings({ partialMatch: true }), store.getState().updateSettings({ autoCommitMs: 9000 })]);
+  expect(store.getState().settings).toMatchObject({ partialMatch: true, autoCommitMs: 5000 });
+  vi.mocked(repo.saveSettings).mockRejectedValueOnce(new Error('quota'));
+  expect(await store.getState().updateSettings({ partialMatch: false })).toBe(false);
+  expect(store.getState().settings.partialMatch).toBe(true);
+});
+it('インポート失敗でメモ・辞書・設定・キャッシュを変更しない', async () => {
+  await store.getState().initialize();
+  const before = store.getState();
+  vi.mocked(repo.applyImport).mockRejectedValueOnce(new Error('quota'));
+  expect(await store.getState().importData({ dictionaries: seedDictionaries(2), memos: [chip('a')], settings: { ...defaultSettings, partialMatch: true } })).toBe(false);
+  expect(store.getState()).toMatchObject({ chips: before.chips, dictionaries: before.dictionaries, settings: before.settings, normalizedDicts: before.normalizedDicts });
+  expect(store.getState().saveErrors).toHaveLength(1);
 });
