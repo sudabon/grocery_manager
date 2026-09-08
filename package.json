@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build-placeholder.mjs",
-    "test": "node --test \"tests/scripts/*.test.mjs\"",
+    "test": "node --test tests/scripts/*.test.mjs",
     "test:e2e": "playwright test"
   },
   "devDependencies": {
