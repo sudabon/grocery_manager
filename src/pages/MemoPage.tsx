@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { QuadrantGrid } from '../components/QuadrantGrid';
 import { InputBar } from '../components/InputBar';
 import { ChipActionSheet } from '../components/ChipActionSheet';
@@ -10,6 +11,7 @@ export function MemoPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const close = useCallback(() => setSelected(null), []);
   const toast = useToast();
+  const dictionariesEmpty = useAppStore((state) => state.dictionaries.every((d) => d.entries.length === 0));
   const storageAvailable = useAppStore((state) => state.storageAvailable);
   const saveError = useAppStore((state) => state.saveErrors[0]);
   const dismissSaveError = useAppStore((state) => state.dismissSaveError);
@@ -21,6 +23,7 @@ export function MemoPage() {
       <p>この環境ではデータを端末に保存できません。ページを閉じると変更が失われます。</p>
       <button type="button" aria-label="保存の案内を閉じる" onClick={() => setBannerClosed(true)}>閉じる</button>
     </aside>}
+    {dictionariesEmpty && <aside className="dictionary-prompt"><Link to="/dictionaries">辞書を設定すると自動で振り分けられます</Link></aside>}
     <QuadrantGrid onSelect={setSelected} />
     <span className="visually-hidden">{pendingWrites ? '保存中' : '保存処理完了'}</span>
     <InputBar onCommit={commit} />

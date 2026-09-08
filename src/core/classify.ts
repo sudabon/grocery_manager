@@ -1,6 +1,7 @@
 import { normalize } from './normalize';
 
 export type QuadrantId = 'q1' | 'q2' | 'q3' | 'q4';
+export const QUADRANT_ORDER: QuadrantId[] = ['q1', 'q2', 'q3', 'q4'];
 interface Entry { quadrant: QuadrantId; raw: string; normalized: string }
 export interface NormalizedDicts {
   exact: Map<string, Entry[]>;

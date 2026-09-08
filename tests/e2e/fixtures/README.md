@@ -42,3 +42,23 @@ fixture は各テストの前にべき等に状態を作り直し、テスト間
 ボード用 fixture は `memo-board.ts` に定義。サーバーを持たずシードAPIを設置できないため、design.md D10 に従いページロードとブラウザ環境設定で準備する。
 
 分類用 fixture は `classification.ts` の `classificationSeed` オプションで上表の名前を選択する。共通の `indexed-db.ts` は `addInitScript` で DB 作成時の upgrade トランザクションにシードを投入し、アプリの接続より先にコミットする。各テストは独立したコンテキストを使い、同一テスト内のリロードでは再シードせず実際の保存結果を検証する。
+
+## 辞書・設定・入出力（add-quadmemo-dictionaries）
+
+`dictionaries.ts` は既存の `classificationSeed` と Page Object を再利用する。
+
+| fixture 名 | 作られる状態 | 使用する TP-ID |
+|---|---|---|
+| `seed:dict-all-empty` | 初期ラベル・4 象限とも空エントリ・既定設定・メモ 0 件 | TP-009, TP-010 |
+| `env:no-web-share` | navigator.share / canShare を無効化（shareMode の既定値） | TP-021, TP-024, TP-028 |
+| `env:web-share-stub` | share / canShare をスタブし渡されたファイル名・内容を記録 | TP-029 |
+| `seed:dict-basic`（再利用） | 基本辞書と既定設定 | TP-001〜006, TP-008, TP-011〜016, TP-019〜023, TP-028〜030 |
+| `seed:memos-across-quadrants`（再利用） | Q1 apple / Q2 ぱん / Q3 牛乳 | TP-007, TP-017〜018, TP-024〜027 |
+
+| 固定ファイル | 用途 |
+|---|---|
+| `files/dictionaries.json` | 正常な 4 象限辞書。Q1 orange、ラベル 企画・暮らし・食品・保留 |
+| `files/broken.json` | 壊れた JSON の拒否と無変更を検証 |
+| `files/unsupported.json` | schemaVersion 99 の全データを拒否 |
+| `files/collision.json` | 既存 apple と同じ ID で本文・正規化本文が「上書き禁止」のメモと、新しい orange の ID を含む。既存 apple を上書きせず衝突をスキップし新規だけ追加 |
+| `files/all-data.json` | 正常な全データ。上書き確認の中止、復元に使用 |

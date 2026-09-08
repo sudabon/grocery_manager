@@ -1,0 +1,81 @@
+import { QUADRANT_ORDER, type QuadrantId } from './classify';
+import { sanitizeEntries } from './dictEntries';
+import { clampAutoCommitMs } from './settings';
+import type { AppSettings, Dictionary, MemoItem } from '../db/schema';
+
+export interface AppData { dictionaries: Dictionary[]; memos: MemoItem[]; settings: AppSettings }
+export class ImportFormatError extends Error {}
+const invalid = () => new ImportFormatError('ファイルの形式が正しくないか、対応していない版数です。');
+function record(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalid();
+  return value as Record<string, unknown>;
+}
+const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const quadrant = (value: unknown): value is QuadrantId => QUADRANT_ORDER.includes(value as QuadrantId);
+
+function dictionaries(value: unknown): Dictionary[] {
+  if (!Array.isArray(value) || value.length !== 4) throw invalid();
+  const seen = new Set<QuadrantId>();
+  const result = value.map((item) => {
+    const d = record(item);
+    if (!quadrant(d.quadrant) || seen.has(d.quadrant) || typeof d.label !== 'string' ||
+      !Array.isArray(d.entries) || !d.entries.every((entry) => typeof entry === 'string') ||
+      (d.updatedAt !== undefined && !finite(d.updatedAt))) throw invalid();
+    seen.add(d.quadrant);
+    return { quadrant: d.quadrant, label: d.label.trim(), entries: sanitizeEntries(d.entries.join('\n')), updatedAt: d.updatedAt ?? Date.now() } as Dictionary;
+  });
+  return QUADRANT_ORDER.map((q) => result.find((d) => d.quadrant === q)!);
+}
+function settings(value: unknown): AppSettings {
+  const s = record(value);
+  if (typeof s.partialMatch !== 'boolean' || typeof s.allowDuplicates !== 'boolean' ||
+    typeof s.showDictationHint !== 'boolean' || !finite(s.autoCommitMs) || (s.key !== undefined && s.key !== 'app')) throw invalid();
+  return { key: 'app', partialMatch: s.partialMatch, allowDuplicates: s.allowDuplicates,
+    showDictationHint: s.showDictationHint, autoCommitMs: clampAutoCommitMs(s.autoCommitMs) };
+}
+function memos(value: unknown): MemoItem[] {
+  if (!Array.isArray(value)) throw invalid();
+  return value.map((item) => {
+    const m = record(item);
+    if (typeof m.id !== 'string' || !m.id || typeof m.rawText !== 'string' || typeof m.normText !== 'string' ||
+      !quadrant(m.quadrant) || !(m.matchedEntry === null || typeof m.matchedEntry === 'string') ||
+      typeof m.autoClassified !== 'boolean' || !finite(m.createdAt) || !finite(m.updatedAt)) throw invalid();
+    return { id: m.id, rawText: m.rawText, normText: m.normText, quadrant: m.quadrant,
+      matchedEntry: m.matchedEntry, autoClassified: m.autoClassified, createdAt: m.createdAt, updatedAt: m.updatedAt };
+  });
+}
+export function dictionaryExport(value: Dictionary[]) { return { version: 1, dictionaries: value }; }
+export function fullExport(data: AppData, now = new Date()) {
+  return { app: 'quadmemo', schemaVersion: 1, exportedAt: now.toISOString(),
+    dictionaries: data.dictionaries, memos: data.memos.map(({ id, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt }) =>
+      ({ id, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt })), settings: data.settings };
+}
+export function parseDictionaryImport(text: string): Dictionary[] {
+  let parsed: unknown;
+  try { parsed = JSON.parse(text); } catch { throw invalid(); }
+  const value = record(parsed);
+  if (value.version !== 1) throw invalid();
+  return dictionaries(value.dictionaries);
+}
+export function validateAppData(value: unknown): AppData {
+  const data = record(value);
+  return { dictionaries: dictionaries(data.dictionaries), memos: memos(data.memos), settings: settings(data.settings) };
+}
+export function parseFullImport(text: string): AppData {
+  let parsed: unknown;
+  try { parsed = JSON.parse(text); } catch { throw invalid(); }
+  const value = record(parsed);
+  if (value.app !== 'quadmemo' || value.schemaVersion !== 1 || typeof value.exportedAt !== 'string' || !Number.isFinite(Date.parse(value.exportedAt))) throw invalid();
+  return validateAppData(value);
+}
+export function skipExistingMemos(incoming: MemoItem[], existingIds: Iterable<string>): MemoItem[] {
+  const seen = new Set(existingIds);
+  return incoming.filter((memo) => {
+    if (seen.has(memo.id)) return false;
+    seen.add(memo.id);
+    return true;
+  });
+}
+export function exportFileName(kind: 'export' | 'dictionaries', date = new Date()): string {
+  return `quadmemo-${kind}-${date.toISOString().slice(0, 10)}.json`;
+}

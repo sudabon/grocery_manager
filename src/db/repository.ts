@@ -1,4 +1,5 @@
 import type { IDBPDatabase } from 'idb';
+import { validateAppData, skipExistingMemos, type AppData } from '../core/portability';
 import type { QuadrantId } from '../core/classify';
 import { defaultSettings, seedDictionaries } from './defaults';
 import { getQuadmemoDb, type AppSettings, type Dictionary, type MemoItem, type QuadmemoDb } from './schema';
@@ -14,6 +15,42 @@ export function createRepository(connect: () => Promise<IDBPDatabase<QuadmemoDb>
     if (typeof window !== 'undefined' && window.__QUADMEMO_FAIL_WRITES__) throw new Error('Injected write failure');
   }
   return {
+    async getAllData(): Promise<AppData> {
+      const db = await connect();
+      const tx = db.transaction(['memos', 'dictionaries', 'settings']);
+      const [memos, dictionaries, settings] = await Promise.all([
+        tx.objectStore('memos').getAll(), tx.objectStore('dictionaries').getAll(), tx.objectStore('settings').get('app'),
+      ]);
+      await tx.done;
+      if (!settings || !('partialMatch' in settings)) throw new Error('Settings missing');
+      return { memos: memos.sort(byCreation), dictionaries, settings };
+    },
+    async applyImport(input: AppData | { dictionaries: Dictionary[] }) {
+      // Validate the complete input before opening a write transaction.
+      const full = 'memos' in input;
+      const data = validateAppData(full ? input : { ...input, memos: [], settings: defaultSettings });
+      checkWrite();
+      const db = await connect();
+      const tx = db.transaction(full ? ['memos', 'dictionaries', 'settings'] : ['dictionaries'], 'readwrite');
+      const completion = tx.done;
+      void completion.catch(() => {});
+      try {
+        for (const dictionary of data.dictionaries) await tx.objectStore('dictionaries').put(dictionary);
+        let added: MemoItem[] = [];
+        if (full) {
+          await tx.objectStore('settings').put(data.settings);
+          const store = tx.objectStore('memos');
+          added = skipExistingMemos(data.memos, await store.getAllKeys());
+          for (const memo of added) await store.add(memo);
+        }
+        await completion;
+        return { ...data, memos: added };
+      } catch (error) {
+        try { tx.abort(); } catch { /* Already aborted or completed. */ }
+        await completion.catch(() => {});
+        throw error;
+      }
+    },
     async getMemos(quadrant?: QuadrantId) {
       const db = await connect();
       return (await (quadrant ? db.getAllFromIndex('memos', 'quadrant', quadrant) : db.getAll('memos'))).sort(byCreation);

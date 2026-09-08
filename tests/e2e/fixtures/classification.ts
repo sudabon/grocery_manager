@@ -6,7 +6,7 @@ import { defaultSettings, seedDictionaries } from '../../../src/db/defaults';
 import type { MemoItem } from '../../../src/db/schema';
 
 export const fixtureNames = [
-  'seed:fresh-storage', 'seed:dict-basic', 'seed:dict-overlap-partial', 'seed:dict-normalize-tie',
+  'seed:dict-all-empty', 'seed:fresh-storage', 'seed:dict-basic', 'seed:dict-overlap-partial', 'seed:dict-normalize-tie',
   'seed:settings-partial-match', 'seed:settings-no-duplicates', 'seed:memos-across-quadrants',
   'seed:dict-custom-labels', 'env:idb-write-failure', 'env:idb-blocked',
 ] as const;
@@ -20,6 +20,7 @@ function seedFor(name: ClassificationFixture): DatabaseSeed {
   dictionaries[1].entries = ['ぱん'];
   dictionaries[2].entries = ['牛乳'];
   const seed: DatabaseSeed = { dictionaries, settings: { ...defaultSettings }, memos: [] };
+  if (name === 'seed:dict-all-empty') dictionaries.forEach((d) => { d.entries = []; });
   if (name === 'seed:dict-overlap-partial') {
     dictionaries[0].entries = ['app']; dictionaries[1].entries = ['apple']; seed.settings.partialMatch = true;
   }

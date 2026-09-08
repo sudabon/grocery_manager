@@ -32,11 +32,11 @@ export function InputBar({ onCommit }: { onCommit: (text: string) => void }) {
   };
   return <div className="input-dock" ref={dockRef}>
     <div id="memo-input-bar" className="input-bar" ref={barRef} style={{ visibility: open ? 'visible' : 'hidden' }}>
-      {hint && <p className="dictation-hint" id="dictation-hint">キーボードのマイクキー🎤をタップして話してください</p>}
+      {hint && settings.showDictationHint && <p className="dictation-hint" id="dictation-hint">キーボードのマイクキー🎤をタップして話してください</p>}
       <form onSubmit={(event) => { event.preventDefault(); submit(); }}>
         <label className="sr-only" htmlFor="memo-input">メモを入力</label>
         <input id="memo-input" ref={inputRef} type="text" placeholder="話す、または入力する" value={controller.text}
-          autoComplete="off" enterKeyHint="done" aria-describedby={hint ? 'dictation-hint' : undefined}
+          autoComplete="off" enterKeyHint="done" aria-describedby={hint && settings.showDictationHint ? 'dictation-hint' : undefined}
           onChange={(event) => controller.change(event.currentTarget.value)}
           onCompositionStart={controller.compositionStart}
           onCompositionEnd={(event) => controller.compositionEnd(event.currentTarget.value)}

@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "dictionaries": [
+    {
+      "quadrant": "q1",
+      "label": "企画",
+      "entries": [
+        "orange"
+      ],
+      "updatedAt": 1
+    },
+    {
+      "quadrant": "q2",
+      "label": "暮らし",
+      "entries": [
+        "ぱん"
+      ],
+      "updatedAt": 1
+    },
+    {
+      "quadrant": "q3",
+      "label": "食品",
+      "entries": [
+        "牛乳"
+      ],
+      "updatedAt": 1
+    },
+    {
+      "quadrant": "q4",
+      "label": "保留",
+      "entries": [],
+      "updatedAt": 1
+    }
+  ]
+}
