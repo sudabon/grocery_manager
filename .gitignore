@@ -1,0 +1,32 @@
+# MacOS
+**/.DS_Store
+
+# IDE
+.vscode/
+.specstory/
+.serena/
+
+# CodingAgent
+.agents/
+.codex/
+.claude/
+.cursor/
+
+# Cursor
+.cursorrules
+.cursorignore
+.cursorindexingignore
+
+# Build and test output
+node_modules/
+dist/
+test-results/
+playwright-report/
+
+# Terraform local state and environment configuration
+.terraform/
+*.tfvars
+*.tfvars.json
+*.tfstate*
+*.tfplan
+*.tfbackend

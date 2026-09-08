@@ -1,0 +1,12 @@
+{
+  "name": "quadmemo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-placeholder.mjs",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}
