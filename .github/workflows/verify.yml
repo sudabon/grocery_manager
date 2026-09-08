@@ -1,0 +1,54 @@
+name: verify
+
+# AWS 接続を必要としない検証（README「AWS 接続なしでのコード検証」と同じ内容）を回す。
+# 配信 E2E は実際の CloudFront 配信先が必要なため、ここでは実行しない。
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # check-test-plan.sh がベースコミットとの差分を見るため、全履歴が必要。
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build
+      # dist/ が空でないこと（deploy.sh の前提）を CI でも確認する。
+      - run: test -s dist/index.html
+      - run: npm test
+      - run: bash -n scripts/deploy.sh
+      - run: bash -n scripts/check-test-plan.sh
+      # ブラウザは不要。playwright.config.ts と TS の健全性を確認する。
+      - run: npx playwright test --list --grep @setup-quadmemo-hosting
+      # test-plan と @<change-id> タグの対応は PR の差分に対してのみ検証できる。
+      # 値は env 経由で渡す（run: へ直接展開しない）。
+      - name: check test-plan coverage
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bash scripts/check-test-plan.sh "$BASE_SHA"
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive infra
+      # backend を無効にすることで AWS 認証なしで検証できる。
+      - run: terraform -chdir=infra init -backend=false
+      - run: terraform -chdir=infra validate
+      # linux_amd64 のハッシュが lock に無いと init が lock を書き換える。
+      # 差分が出たら providers lock で両プラットフォーム分を記録し直す必要がある。
+      - run: git diff --exit-code infra/.terraform.lock.hcl
