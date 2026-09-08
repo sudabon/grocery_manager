@@ -224,3 +224,53 @@ test('grep が実行エラーを返したらタグ欠落と区別して exit 2',
   assert.match(result.stderr, /tests\/e2e\/ の検索に失敗しました/);
   assert.doesNotMatch(result.stdout, /タグ付きの E2E テストが/);
 });
+
+// 差分モードは CI（新規チェックアウト）と同じ「コミット済みツリー」を見る必要がある。
+// ローカルの未追跡ファイルを存在扱いすると、ローカルで通って CI だけが落ちる。
+test('差分モードでは未追跡の test-plan.md をコミット漏れとして exit 1', async t => {
+  const ctx = await setup(t, {
+    changes: { 'my-change': { plan: false } },
+    specs: { 'a.spec.ts': "test('x', { tag: ['@my-change'] }, () => {});" },
+    commit: false,
+  });
+  ctx.git('add', 'scripts', 'tests');
+  ctx.git('commit', '-qm', 'base');
+  ctx.git('add', 'openspec');
+  ctx.git('commit', '-qm', 'add change');
+  await writeFile(join(ctx.root, 'openspec', 'changes', 'my-change', 'test-plan.md'),
+    '| TP-001 | x | y |\n');
+  const result = run(ctx, ['HEAD~1']);
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /my-change の test-plan\.md がコミットされていません/);
+});
+
+test('差分モードでは未追跡の E2E テストをコミット漏れとして exit 1', async t => {
+  const ctx = await setup(t, {
+    changes: { 'my-change': { plan: true } },
+    commit: false,
+  });
+  ctx.git('add', 'scripts');
+  ctx.git('commit', '-qm', 'base');
+  ctx.git('add', 'openspec');
+  ctx.git('commit', '-qm', 'add change');
+  await writeFile(join(ctx.root, 'tests', 'e2e', 'a.spec.ts'),
+    "test('x', { tag: ['@my-change'] }, () => {});");
+  const result = run(ctx, ['HEAD~1']);
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /@my-change タグ付きの E2E テストがコミットされていません/);
+});
+
+// --change は未コミットの change を手元で検証する用途なので、
+// ファイルシステムを見る従来の挙動を保つ。
+test('--change では未追跡の test-plan.md と E2E テストでも成功する', async t => {
+  const ctx = await setup(t, {
+    changes: { 'my-change': { plan: true } },
+    specs: { 'a.spec.ts': "test('x', { tag: ['@my-change'] }, () => {});" },
+    commit: false,
+  });
+  ctx.git('add', 'scripts');
+  ctx.git('commit', '-qm', 'base');
+  const result = run(ctx, ['--change', 'my-change']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Checked: my-change/);
+});
