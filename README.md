@@ -163,7 +163,7 @@ npm run test:scripts
 bash scripts/check-test-plan.sh --change setup-quadmemo-hosting
 ```
 
-`npm run test:scripts` は `tests/scripts/` のスクリプト検証を実行します。`check-test-plan.sh` は引数なしなら `origin/main...HEAD` の差分を確認しますが、`openspec/` が git 管理下にない間は差分ベースの検証が成立しないため exit 2 になります。差分モードは CI（新規チェックアウト）と同じ結果になるよう `HEAD` のコミット済みツリーを参照するため、未追跡のまま残った `test-plan.md` や E2E テストはコミット漏れとして報告します。未コミットの change を確認する場合は、作業ツリーを参照する `--change` を使います。Terraform の backend 無効での検証後、実環境へ適用する際は通常の `terraform init` を実行してください。
+`npm run test:scripts` は `tests/scripts/` のスクリプト検証を実行します。`check-test-plan.sh` は引数なしなら `origin/main...HEAD` の差分を確認しますが、`openspec/` が git 管理下にない間は差分ベースの検証が成立しないため exit 2 になります。差分モードは CI（新規チェックアウト）と同じ結果になるよう `HEAD` のコミット済みツリーを参照するため、未追跡のまま残った `test-plan.md` や E2E テストはコミット漏れとして報告します。未コミットの change を確認する場合は、作業ツリーを参照する `--change` を使います。`tasks.md` にチェック済みタスクが 1 つも無い未着手の change は、実装が存在しないため `@<change-id>` の E2E テストを要求せず `Pending:` として報告します（`test-plan.md` は提案時の成果物なので必須です）。1 つでもチェックが付いた時点で E2E タグが必須になります。Terraform の backend 無効での検証後、実環境へ適用する際は通常の `terraform init` を実行してください。
 
 ## 仕様
 
