@@ -60,5 +60,5 @@ fixture は各テストの前にべき等に状態を作り直し、テスト間
 | `files/dictionaries.json` | 正常な 4 象限辞書。Q1 orange、ラベル 企画・暮らし・食品・保留 |
 | `files/broken.json` | 壊れた JSON の拒否と無変更を検証 |
 | `files/unsupported.json` | schemaVersion 99 の全データを拒否 |
-| `files/collision.json` | 既存 apple と同じ ID、新しい orange の ID を含む。衝突をスキップし新規だけ追加 |
+| `files/collision.json` | 既存 apple と同じ ID で本文・正規化本文が「上書き禁止」のメモと、新しい orange の ID を含む。既存 apple を上書きせず衝突をスキップし新規だけ追加 |
 | `files/all-data.json` | 正常な全データ。上書き確認の中止、復元に使用 |

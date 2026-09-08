@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import { clampAutoCommitMs } from '../core/settings';
-import { exportFileName, fullExport, parseFullImport, type AppData } from '../core/portability';
+import { exportFileName, fullExport, ImportFormatError, parseFullImport, type AppData } from '../core/portability';
 import { shareExport } from '../core/shareExport';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { SaveFeedback } from '../components/SaveFeedback';
@@ -12,6 +12,8 @@ export function SettingsPage() {
   const settings = useAppStore((state) => state.settings);
   const permission = useAppStore((state) => state.persistencePermission);
   const pendingWrites = useAppStore((state) => state.pendingWrites);
+  const storageAvailable = useAppStore((state) => state.storageAvailable);
+  const dataLoaded = useAppStore((state) => state.dataLoaded);
   const [toggleValues, setToggleValues] = useState(settings);
   const [waitMs, setWaitMs] = useState(settings.autoCommitMs);
   const range = useRef<HTMLInputElement>(null);
@@ -39,7 +41,11 @@ export function SettingsPage() {
     if (lock.current) return;
     lock.current = true; setBusy(true);
     try { setIncoming(parseFullImport(await file.text())); }
-    catch { toast.notify('インポートできませんでした。ファイルの形式・版数を確認してください。'); }
+    catch (error) {
+      toast.notify(error instanceof ImportFormatError
+        ? 'インポートできませんでした。ファイルの形式・版数を確認してください。'
+        : 'ファイルを読み取れませんでした。もう一度選び直してください。');
+    }
     finally { lock.current = false; setBusy(false); }
   }
   async function confirm() {
@@ -76,6 +82,11 @@ export function SettingsPage() {
     </section>
     <section className="settings-section" aria-label="全データのバックアップ"><h3>バックアップと復元</h3>
       <p>メモ・辞書・設定をまとめて保存できます。定期的なバックアップ（エクスポート）をおすすめします。</p>
+      {/* 3 つの導線で条件が違う: エクスポートは書き込み能力を必要としないので塞がず、読み込み失敗だけを開示する。
+          インポートは失敗しても applyImport がトランザクションを中断して無変更に戻るため塞がず開示に留める。
+          メモ全削除だけは storageAvailable で塞ぐ（押しても必ず失敗し、画面から 1 件も消えないため）。 */}
+      {!dataLoaded && <p className="help-text">端末のデータを読み込めなかったため、出力できるのは現在画面に表示されている内容だけです。復元用のバックアップとしては使わないでください。</p>}
+      {!storageAvailable && <p className="help-text">この環境では端末にデータを保存できないため、インポートは失敗する可能性があります。</p>}
       <button type="button" className="secondary-button" disabled={busy || pendingWrites > 0} onClick={() => {
         const state = useAppStore.getState();
         void shareExport(fullExport({ dictionaries: state.dictionaries, memos: state.chips, settings: state.settings }), exportFileName('export'))
@@ -86,7 +97,8 @@ export function SettingsPage() {
       }} /></label>
     </section>
     <section className="settings-section"><h3>メモの削除</h3><p>辞書と設定はそのままに、すべてのメモを削除します。</p>
-      <button type="button" className="secondary-button danger" disabled={busy || pendingWrites > 0} onClick={() => setDeleteStep(1)}>メモを全削除</button>
+      {!storageAvailable && <p className="help-text">この環境では端末にデータを保存できないため、削除を実行できません。</p>}
+      <button type="button" className="secondary-button danger" disabled={busy || pendingWrites > 0 || !storageAvailable} onClick={() => setDeleteStep(1)}>メモを全削除</button>
     </section>
     <section className="settings-section" aria-label="アプリ情報"><h3>アプリ情報</h3>
       <p>バージョン {import.meta.env.VITE_APP_VERSION}</p>

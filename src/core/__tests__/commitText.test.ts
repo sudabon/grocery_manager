@@ -3,7 +3,14 @@ import { commitText } from '../commitText';
 import { buildNormalizedDicts } from '../classify';
 import { useAppStore } from '../../store/useAppStore';
 import { defaultSettings } from '../../db/defaults';
-beforeEach(() => { useAppStore.setState({ normalizedDicts: buildNormalizedDicts([]), settings: { ...defaultSettings } }); return useAppStore.getState().clearAll(); });
+beforeEach(async () => {
+  // clearAll() は writeQueue に連なるので、await すると前テストの飛行中の書き込みが settle する。
+  // これを待たずに pendingWrites を 0 にすると、後から届く finally が値を負へ持っていく。
+  await useAppStore.getState().clearAll();
+  // フィールドを列挙するとストアに項目が増えたとき静かに漏れるため、初期状態そのものへ戻す。
+  useAppStore.setState(useAppStore.getInitialState(), true);
+  useAppStore.setState({ normalizedDicts: buildNormalizedDicts([]), settings: { ...defaultSettings } });
+});
 it('トークンをQ4へ追加し50件超過を通知する', () => {
   const notify = vi.fn(); commitText(Array(51).fill('牛乳').join(' '), notify);
   const chips = useAppStore.getState().chips;

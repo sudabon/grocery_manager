@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { defaultSettings, seedDictionaries } from '../../db/defaults';
-import { dictionaryExport, exportFileName, fullExport, parseDictionaryImport, parseFullImport, skipExistingMemos } from '../portability';
+import { dictionaryExport, exportFileName, fullExport, ImportFormatError, parseDictionaryImport, parseFullImport, skipExistingMemos } from '../portability';
 const memo = { id: 'a', rawText: 'パン', normText: 'ぱん', quadrant: 'q2' as const, matchedEntry: 'パン', autoClassified: true, createdAt: 1, updatedAt: 1 };
 const data = () => ({ dictionaries: seedDictionaries(1), memos: [memo], settings: { ...defaultSettings } });
 it('辞書と全データを往復でき、一時表示フラグは出力しない', () => {
@@ -10,7 +10,7 @@ it('辞書と全データを往復でき、一時表示フラグは出力しな�
   expect(parseFullImport(JSON.stringify(fullExport({ ...data(), memos: [] }))).memos).toEqual([]);
 });
 it.each(['{', 'null', '[]', '{"version":2}', '{"version":1}'])('不正な辞書JSONを拒否: %s', (text) => {
-  expect(() => parseDictionaryImport(text)).toThrow();
+  expect(() => parseDictionaryImport(text)).toThrow(ImportFormatError);
 });
 it.each([
   (d: any) => { d.schemaVersion = 2; }, (d: any) => { delete d.settings; },
@@ -23,7 +23,7 @@ it.each([
   (d: any) => { delete d.settings.showDictationHint; }, (d: any) => { d.settings.autoCommitMs = null; },
 ])('不正な必須項目を全件検証で拒否 %#', (mutate) => {
   const value = JSON.parse(JSON.stringify(fullExport(data()))); mutate(value);
-  expect(() => parseFullImport(JSON.stringify(value))).toThrow();
+  expect(() => parseFullImport(JSON.stringify(value))).toThrow(ImportFormatError);
 });
 it.each([[0, 500], [9999, 5000]])('設定範囲外%sを%sにクランプ', (value, expected) => {
   const input = data(); input.settings.autoCommitMs = value;

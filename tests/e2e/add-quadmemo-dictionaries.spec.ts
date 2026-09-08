@@ -64,8 +64,10 @@ test.describe('既存メモを持つ状態', () => {
   });
   test('インポートでID衝突をスキップして新規メモだけ追加する', tags('TP-026'), async ({ settingsPage, memo }) => {
     await settingsPage.open(); await settingsPage.import(fixtureFile('collision.json')); await settingsPage.acceptImport(); await settingsPage.back();
-    await memo.reload(); await expect(memo.chips).toHaveCount(4); await expect(memo.classifiedChip('apple')).toHaveCount(1);
-    await expect(memo.classifiedChip('orange')).toHaveCount(1);
+    await memo.reload(); await expect(memo.chips).toHaveCount(4); await expect(memo.classifiedChip('上書き禁止')).toHaveCount(0);
+    // 衝突メモはファイル側で q3・本文「上書き禁止」。既存 apple が一部でも上書きされれば象限の中身が変わる。
+    await expect(memo.quadrantChips(1)).toHaveText(['apple', 'orange']);
+    await expect(memo.quadrantChips(3)).toHaveText(['牛乳']);
   });
   test('上書き確認を中止するとメモ辞書設定はすべて無変更', tags('TP-027'), async ({ settingsPage }) => {
     await settingsPage.open(); const before = await readDownload(await settingsPage.export());

@@ -4,7 +4,8 @@ import { clampAutoCommitMs } from './settings';
 import type { AppSettings, Dictionary, MemoItem } from '../db/schema';
 
 export interface AppData { dictionaries: Dictionary[]; memos: MemoItem[]; settings: AppSettings }
-const invalid = () => new Error('ファイルの形式が正しくないか、対応していない版数です。');
+export class ImportFormatError extends Error {}
+const invalid = () => new ImportFormatError('ファイルの形式が正しくないか、対応していない版数です。');
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalid();
   return value as Record<string, unknown>;
@@ -21,7 +22,7 @@ function dictionaries(value: unknown): Dictionary[] {
       !Array.isArray(d.entries) || !d.entries.every((entry) => typeof entry === 'string') ||
       (d.updatedAt !== undefined && !finite(d.updatedAt))) throw invalid();
     seen.add(d.quadrant);
-    return { quadrant: d.quadrant, label: d.label, entries: sanitizeEntries(d.entries.join('\n')), updatedAt: d.updatedAt ?? Date.now() } as Dictionary;
+    return { quadrant: d.quadrant, label: d.label.trim(), entries: sanitizeEntries(d.entries.join('\n')), updatedAt: d.updatedAt ?? Date.now() } as Dictionary;
   });
   return QUADRANT_ORDER.map((q) => result.find((d) => d.quadrant === q)!);
 }
@@ -50,7 +51,9 @@ export function fullExport(data: AppData, now = new Date()) {
       ({ id, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt })), settings: data.settings };
 }
 export function parseDictionaryImport(text: string): Dictionary[] {
-  const value = record(JSON.parse(text));
+  let parsed: unknown;
+  try { parsed = JSON.parse(text); } catch { throw invalid(); }
+  const value = record(parsed);
   if (value.version !== 1) throw invalid();
   return dictionaries(value.dictionaries);
 }
@@ -59,7 +62,9 @@ export function validateAppData(value: unknown): AppData {
   return { dictionaries: dictionaries(data.dictionaries), memos: memos(data.memos), settings: settings(data.settings) };
 }
 export function parseFullImport(text: string): AppData {
-  const value = record(JSON.parse(text));
+  let parsed: unknown;
+  try { parsed = JSON.parse(text); } catch { throw invalid(); }
+  const value = record(parsed);
   if (value.app !== 'quadmemo' || value.schemaVersion !== 1 || typeof value.exportedAt !== 'string' || !Number.isFinite(Date.parse(value.exportedAt))) throw invalid();
   return validateAppData(value);
 }

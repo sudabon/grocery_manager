@@ -7,8 +7,8 @@
 | コマンド | 結果 |
 |---|---|
 | `npm run build` | TypeScript と Vite のビルド成功 |
-| `npm test` | 14 ファイル、130 テスト成功 |
-| `npx playwright test --grep @add-quadmemo-dictionaries --workers 4` | Chromium / mobile-safari 合計60件成功、フレーク0件 |
+| `npm test` | 14 ファイル、131 テスト成功 |
+| `npx playwright test --grep "@add-quadmemo-dictionaries\|@smoke"` | Chromium / mobile-safari 合計60件成功、フレーク0件 |
 | `npx playwright test --grep '@add-quadmemo-quadrant-ui\|@add-quadmemo-classification' --workers 4` | 同2プロジェクト合計106件成功、フレーク0件 |
 | `bash scripts/check-test-plan.sh` | コミット済み差分なしのため skip |
 | `bash scripts/check-test-plan.sh --change add-quadmemo-dictionaries` | 作業ツリーの対象changeを検証、成功 |

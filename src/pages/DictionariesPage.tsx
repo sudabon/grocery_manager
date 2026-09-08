@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { QUADRANT_ORDER, type QuadrantId } from '../core/classify';
-import { dictionaryExport, exportFileName, parseDictionaryImport } from '../core/portability';
+import { dictionaryExport, exportFileName, ImportFormatError, parseDictionaryImport } from '../core/portability';
 import { shareExport } from '../core/shareExport';
 import { useAppStore } from '../store/useAppStore';
 import { useToast } from '../components/Toast';
@@ -9,6 +9,8 @@ import { SaveFeedback } from '../components/SaveFeedback';
 
 export function DictionariesPage() {
   const dictionaries = useAppStore((state) => state.dictionaries);
+  const storageAvailable = useAppStore((state) => state.storageAvailable);
+  const dataLoaded = useAppStore((state) => state.dataLoaded);
   const [selected, setSelected] = useState<QuadrantId>('q1');
   const [drafts, setDrafts] = useState(() => Object.fromEntries(dictionaries.map((d) => [d.quadrant, { label: d.label, text: d.entries.join('\n') }])));
   const [busy, setBusy] = useState(false);
@@ -38,7 +40,11 @@ export function DictionariesPage() {
         setDrafts(Object.fromEntries(dictionaries.map((d) => [d.quadrant, { label: d.label, text: d.entries.join('\n') }])));
         toast.notify('辞書をインポートしました');
       }
-    } catch { toast.notify('インポートできませんでした。ファイルの形式・版数を確認してください。'); }
+    } catch (error) {
+      toast.notify(error instanceof ImportFormatError
+        ? 'インポートできませんでした。ファイルの形式・版数を確認してください。'
+        : 'ファイルを読み取れませんでした。もう一度選び直してください。');
+    }
     finally { lock.current = false; setBusy(false); }
   }
   return <main className="secondary-page"><div className="page-content">
@@ -65,6 +71,8 @@ export function DictionariesPage() {
     <p id="dictionary-help" className="help-text">複合語が細かく分割される場合は、分割後の単位で登録してください。正規化して同じになる表記は 1 件に統合され、先に書いた表記が残ります。</p>
     <section className="settings-section" aria-label="辞書のバックアップ"><h3>辞書のバックアップ</h3>
       <p>保存済みの 4 象限の辞書を出力します。インポートすると 4 象限の辞書を置き換えます。</p>
+      {!dataLoaded && <p className="help-text">端末のデータを読み込めなかったため、出力できるのは現在画面に表示されている内容だけです。復元用のバックアップとしては使わないでください。</p>}
+      {!storageAvailable && <p className="help-text">この環境では端末にデータを保存できないため、インポートは失敗する可能性があります。</p>}
       <button type="button" className="secondary-button" disabled={busy} onClick={() => {
         void shareExport(dictionaryExport(dictionaries), exportFileName('dictionaries')).catch(() => toast.notify('エクスポートできませんでした。もう一度お試しください。'));
       }}>辞書をエクスポート</button>

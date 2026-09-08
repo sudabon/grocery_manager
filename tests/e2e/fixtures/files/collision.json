@@ -37,9 +37,9 @@
   "memos": [
     {
       "id": "01J00000000000000000000001",
-      "rawText": "apple",
-      "normText": "apple",
-      "quadrant": "q1",
+      "rawText": "上書き禁止",
+      "normText": "上書き禁止",
+      "quadrant": "q3",
       "matchedEntry": "apple",
       "autoClassified": true,
       "createdAt": 1,
