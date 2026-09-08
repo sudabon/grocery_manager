@@ -38,13 +38,14 @@ export function openQuadmemoDb() {
       db.createObjectStore('dictionaries', { keyPath: 'quadrant' });
       db.createObjectStore('settings', { keyPath: 'key' });
     },
-    blocking() { void opened.then((db) => db.close()); },
+    blocking() { connection = undefined; void opened.then((db) => db.close()).catch(() => {}); },
+    terminated() { connection = undefined; },
   });
   return opened;
 }
 
-// A single connection per application; repository construction remains injectable for tests.
-let connection: ReturnType<typeof openQuadmemoDb>;
+// One connection per application. It is dropped on close, terminate, and open failure so the next call reopens; repository construction remains injectable for tests.
+let connection: ReturnType<typeof openQuadmemoDb> | undefined;
 export function getQuadmemoDb() {
-  return connection ??= openQuadmemoDb();
+  return connection ??= openQuadmemoDb().catch((error) => { connection = undefined; throw error; });
 }

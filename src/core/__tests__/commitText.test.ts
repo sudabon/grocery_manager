@@ -1,7 +1,9 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { commitText } from '../commitText';
+import { buildNormalizedDicts } from '../classify';
 import { useAppStore } from '../../store/useAppStore';
-beforeEach(() => useAppStore.getState().clearAll());
+import { defaultSettings } from '../../db/defaults';
+beforeEach(() => { useAppStore.setState({ normalizedDicts: buildNormalizedDicts([]), settings: { ...defaultSettings } }); return useAppStore.getState().clearAll(); });
 it('トークンをQ4へ追加し50件超過を通知する', () => {
   const notify = vi.fn(); commitText(Array(51).fill('牛乳').join(' '), notify);
   const chips = useAppStore.getState().chips;
@@ -25,4 +27,23 @@ it('同一ミリ秒の50件はULIDが単調増加する', () => {
   expect(ids).toEqual([...ids].sort());
   expect(new Set(ids).size).toBe(50);
   for (const id of ids) expect(id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+});
+it('ストアの辞書と部分一致設定を使って分類する', () => {
+  useAppStore.setState({ normalizedDicts: buildNormalizedDicts([{ quadrant: 'q1', entries: ['牛乳'] }]) });
+  commitText('牛乳 みかん', vi.fn());
+  expect(useAppStore.getState().chips).toMatchObject([
+    { rawText: '牛乳', quadrant: 'q1', matchedEntry: '牛乳' },
+    { rawText: 'みかん', quadrant: 'q4', matchedEntry: null },
+  ]);
+});
+it.each([
+  [false, 'q4', null],
+  [true, 'q1', 'apple'],
+])('部分一致=%s の設定を尊重して包含だけの語の配置を決める', (partialMatch, quadrant, matchedEntry) => {
+  useAppStore.setState({
+    normalizedDicts: buildNormalizedDicts([{ quadrant: 'q1', entries: ['apple'] }]),
+    settings: { ...defaultSettings, partialMatch },
+  });
+  commitText('apples', vi.fn());
+  expect(useAppStore.getState().chips).toMatchObject([{ rawText: 'apples', quadrant, matchedEntry }]);
 });

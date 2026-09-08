@@ -61,6 +61,11 @@ it('probeは読み戻して検証し一時レコードを残さない', async ()
   expect(await repo.probeStorage()).toBe(false);
   expect(await db.count('settings')).toBe(0);
 });
+it('crypto.randomUUIDが無い環境でもprobeできる', async () => {
+  vi.stubGlobal('crypto', {});
+  expect(await repo.probeStorage()).toBe(true);
+  expect(await db.count('settings')).toBe(0);
+});
 it('probeのopen失敗・書き込み失敗を保存不可にする', async () => {
   expect(await createRepository(async () => { throw new Error('blocked'); }).probeStorage()).toBe(false);
   vi.spyOn(db, 'put').mockRejectedValueOnce(new Error('quota'));

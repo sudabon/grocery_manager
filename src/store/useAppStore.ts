@@ -70,8 +70,11 @@ export function createAppStore(repo: Repository = repository, persist = requestP
         // Persistence permission is independent and must not delay the memo board.
         void persist().then((persistencePermission) => set({ persistencePermission }));
         let storageAvailable = await repo.probeStorage();
+        if (storageAvailable) {
+          // Seeding is a write; its failure must not discard memos that can still be read.
+          try { await repo.seed(); } catch { storageAvailable = false; }
+        }
         try {
-          if (storageAvailable) await repo.seed();
           const [chips, dictionaries, settings] = await Promise.all([
             repo.getMemos(), repo.getDictionaries(), repo.getSettings(),
           ]);

@@ -33,3 +33,10 @@ it.each(['', '　\n\t'])('空トークンは分類しない: %s', (token) => {
   expect(classify(token, dicts, true)).toBeNull();
   expect(classify(token, dicts, false)).toBeNull();
 });
+it('部分一致ONでもどのエントリにも一致しなければQ4へ落とす', () => {
+  expect(classify('zzz', dicts, true)).toEqual({ quadrant: 'q4', matchedEntry: null });
+});
+it('正規化後に空になる辞書エントリは部分一致の候補にしない', () => {
+  const cache = buildNormalizedDicts([{ quadrant: 'q1', entries: ['　'] }, { quadrant: 'q2', entries: ['ぱん'] }]);
+  expect(classify('zzz', cache, true)).toEqual({ quadrant: 'q4', matchedEntry: null });
+});

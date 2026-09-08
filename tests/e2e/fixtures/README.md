@@ -12,7 +12,6 @@ test-plan.md の「前提(fixture)」列に書いた fixture 名は、必ずこ�
 | `env:reduced-motion` | reducedMotion: reduce で開く (`reducedMotionBoard`) | add-quadmemo-quadrant-ui: TP-027 | fixture 直接方式 |
 | `env:no-dialog` | showModal を無効化してフォールバックを検証 (`noDialog`) | add-quadmemo-quadrant-ui: TP-026 | fixture 直接方式 |
 | `env:deployed-origin` | `E2E_BASE_URL` の HTTPS 配信先を使用。未指定・HTTP 指定・パス/クエリ/ハッシュを含む指定の場合はネットワークアクセス前に skip。データ変更なし | setup-quadmemo-hosting: TP-001〜TP-006 | fixture 直接方式 |
-
 | `seed:fresh-storage` | 新規ブラウザコンテキストの未作成DB。アプリ自身が初期シードを投入 | add-quadmemo-classification: TP-018 | fixture 直接方式 |
 | `seed:dict-basic` | Q1: apple・会議・猫、Q2: ぱん、Q3: 牛乳、Q4: 空。既定設定・メモ0件 | add-quadmemo-classification: TP-001〜006, 011, 013〜015, 020, 023〜024 | fixture 直接方式 |
 | `seed:dict-overlap-partial` | Q1: app、Q2: apple。部分一致ON | add-quadmemo-classification: TP-007 | fixture 直接方式 |
@@ -21,7 +20,7 @@ test-plan.md の「前提(fixture)」列に書いた fixture 名は、必ずこ�
 | `seed:settings-no-duplicates` | 基本辞書・重複OFF・Q1にapple 1件 | add-quadmemo-classification: TP-012 | fixture 直接方式 |
 | `seed:memos-across-quadrants` | 基本辞書・Q1 apple、Q2 ぱん、Q3 牛乳の3件 | add-quadmemo-classification: TP-016 | fixture 直接方式 |
 | `seed:dict-custom-labels` | ラベル: 企画・暮らし・食品・保留。基本エントリ・部分一致ON・自動確定3000ms・ヒントOFF | add-quadmemo-classification: TP-017, 019 | fixture 直接方式 |
-| `env:idb-write-failure` | 基本辞書をシードし読み取り専用 __QUADMEMO_FAIL_WRITES__ フラグで更新処理を失敗させる（probe・ロードは成功） | add-quadmemo-classification: TP-021 | fixture 直接方式 |
+| `env:idb-write-failure` | 基本辞書をシードし読み取り専用 `__QUADMEMO_FAIL_WRITES__` フラグで更新処理を失敗させる（probe・ロードは成功） | add-quadmemo-classification: TP-021 | fixture 直接方式 |
 | `env:idb-blocked` | indexedDB 取得時に SecurityError を発生させる | add-quadmemo-classification: TP-022 | fixture 直接方式 |
 
 `env:deployed-origin` は `deployed-origin.ts` の自動 fixture `deployedOrigin` が実装する。

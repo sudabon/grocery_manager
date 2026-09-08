@@ -45,6 +45,19 @@ it.each(['granted', 'denied', 'unsupported'] as const)('起動時ロードは一
   expect(store.getState()).toMatchObject({ ready: true, persistencePermission: permission, chips: [{ id: 'saved' }], settings: { partialMatch: true } });
   expect(store.getState().normalizedDicts.exact.has('れびゅー')).toBe(true);
 });
+it('保存不可でも読み取りに成功すれば既存メモを表示する', async () => {
+  vi.mocked(repo.probeStorage).mockResolvedValue(false);
+  vi.mocked(repo.getMemos).mockResolvedValue([chip('saved')]);
+  await store.getState().initialize();
+  expect(store.getState()).toMatchObject({ ready: true, storageAvailable: false, chips: [{ id: 'saved' }] });
+  expect(repo.seed).not.toHaveBeenCalled();
+});
+it('seedに失敗しても読み取れたメモは捨てない', async () => {
+  vi.mocked(repo.seed).mockRejectedValue(new Error('quota'));
+  vi.mocked(repo.getMemos).mockResolvedValue([chip('saved')]);
+  await store.getState().initialize();
+  expect(store.getState()).toMatchObject({ ready: true, storageAvailable: false, chips: [{ id: 'saved' }] });
+});
 it('保存不可でも既存データを読めれば表示し読めなければ既定辞書でメモを続ける', async () => {
   vi.mocked(repo.probeStorage).mockResolvedValue(false);
   vi.mocked(repo.getMemos).mockRejectedValue(new Error('blocked'));

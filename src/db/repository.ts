@@ -58,8 +58,9 @@ export function createRepository(connect: () => Promise<IDBPDatabase<QuadmemoDb>
     async probeStorage(): Promise<boolean> {
       try {
         const db = await connect();
-        const key = `probe:${crypto.randomUUID()}`;
-        const probe = crypto.randomUUID();
+        const token = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+        const key = `probe:${token()}`;
+        const probe = token();
         await db.put('settings', { key, probe });
         const result = await db.get('settings', key);
         await db.delete('settings', key);
