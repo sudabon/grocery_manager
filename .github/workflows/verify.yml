@@ -20,12 +20,13 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
       - run: npm ci
       - run: npm run build
       # dist/ が空でないこと（deploy.sh の前提）を CI でも確認する。
       - run: test -s dist/index.html
       - run: npm test
+      - run: npm run test:scripts
       - run: bash -n scripts/deploy.sh
       - run: bash -n scripts/check-test-plan.sh
       # ブラウザは不要。playwright.config.ts と TS の健全性を確認する。
