@@ -4,7 +4,7 @@
 
 ## QuadMemo
 
-iPhone 向けの4象限メモアプリ。ホスティング基盤と、入力した単語をチップとして並べるメモ UI を実装しています。分類・永続化・辞書編集・PWA/オフライン対応は後続の OpenSpec change で実装します。
+iPhone 向けの4象限メモアプリ。メモの分類・端末内保存・辞書編集・バックアップに対応し、ホーム画面への追加と初回オンライン読み込み後のオフライン利用ができます。
 
 ## ローカルでの確認
 
@@ -23,7 +23,7 @@ npx playwright install chromium webkit
 独自サブドメイン → CloudFront（HTTPS・TLS 1.2 以上）→ OAC → 非公開 S3（東京）の構成です。ACM 証明書は us-east-1 で作成します。DNS は外部レジストラで手動管理し、Route 53 は使用しません。本番 1 環境のみです。
 
 - HTTP は HTTPS にリダイレクトします。403/404 は `index.html` の 200 応答へ変換します。
-- カスタムキャッシュポリシーは最低・既定 TTL 0 秒、最大 TTL 31536000 秒です。エントリポイント（`index.html` / `sw.js` / `registerSW.js` / `manifest.webmanifest`）は `no-cache`、それ以外の配信物はすべて 1 年 `immutable` で配信します。ハッシュ名でないファイルを更新できる状態に保つには、`scripts/deploy.sh` の `ENTRYPOINTS` 配列に追加してください（この配列が唯一の出所で、`--exclude`・個別アップロード・無効化パスのすべてに反映されます）。
+- カスタムキャッシュポリシーは最低・既定 TTL 0 秒、最大 TTL 31536000 秒です。エントリポイント（`index.html` / `sw.js` / `manifest.webmanifest`）と固定名の `icons/` 3 ファイルの計 6 パスは `no-cache`、それ以外の配信物はすべて 1 年 `immutable` で配信します。ハッシュ名でないファイルを更新できる状態に保つには、`scripts/deploy.sh` の `ENTRYPOINTS` 配列に追加してください（この配列が唯一の出所で、`--exclude`・個別アップロード・無効化パスのすべてに反映されます）。
 - S3 フォールバックに限り、エラー TTL を 0 秒に設定しても AWS の最小 1 秒のエッジキャッシュを許容します。通常のエントリポイントにこの例外は適用しません。
 - S3 はパブリックアクセスを全ブロックし、CloudFront のサービスプリンシパルに対して `AWS:SourceArn` で対象ディストリビューションに限定したうえで `s3:GetObject` だけを許可します。CloudFront はマネージドのセキュリティヘッダーを付与します。
 
@@ -47,7 +47,8 @@ set -a; . ./.env; set +a
 | `AWS_REGION` | 配信用 S3 のリージョン（既定 `ap-northeast-1`） |
 | `QUADMEMO_TFSTATE_BUCKET` | tfstate を置く S3 バケット名。S3 の名前空間はグローバルに一意なので、他と衝突しない名前を選ぶ |
 | `TF_VAR_domain_name` | 配信用サブドメインの FQDN。ラベルを 3 つ以上含むもの（`infra/variables.tf` の検証条件を参照） |
-| `E2E_BASE_URL` | 配信 E2E の対象。`TF_VAR_domain_name` と同じホストを `https://` で指定する |
+| `E2E_BASE_URL` | 既存プロジェクトの配信 E2E の対象。`TF_VAR_domain_name` と同じホストを `https://` で指定し、dev の自動起動を省く |
+| `E2E_PWA_BASE_URL` | `pwa` プロジェクトの対象 URL。指定時は preview の自動起動を省く。配信先で PWA を検証する場合はその URL を指定する |
 
 リポジトリ側で固定している値は次のとおりです。
 
@@ -127,7 +128,7 @@ terraform -chdir=infra plan
 
 Terraform の出力から配信先を取得し、ビルド → S3 同期 → 無効化完了待ちまで実行します。ビルド失敗や空の `index.html` ではアップロードしません。
 
-`sync --delete` で古いアセットを削除します。`index.html` / `sw.js` / `registerSW.js` / `manifest.webmanifest` は `no-cache` で個別アップロードし、成果物に存在しないものは S3 から削除します（S3 に実在するものを消すときは stderr へ警告します）。通常はこの 4 パスだけを無効化し、削除がある場合は `/*` 1 パスに置き換えて古いファイルが CDN に残らないようにします。エントリポイントが空、または通常ファイルでない場合は同期前にデプロイを中止します。
+`sync --delete` で古いアセットを削除します。`index.html` / `sw.js` / `manifest.webmanifest` は `no-cache` で個別アップロードし、成果物に存在しないものは S3 から削除します（S3 に実在するものを消すときは stderr へ警告します）。固定名のアイコン 3 ファイルも同様に扱います。通常はこれら 6 パスを無効化し、削除がある場合は `/*` 1 パスに置き換えて古いファイルが CDN に残らないようにします。エントリポイントが空、または通常ファイルでない場合は同期前にデプロイを中止します。
 
 デプロイ権限は配信用バケットの一覧取得・書き込み・削除、対象 CloudFront の無効化作成・完了照会、および Terraform 出力を読むための tfstate 読み取りが必要です。AWS の課金条件は利用アカウントの現行プランで確認してください。
 
@@ -183,8 +184,8 @@ npm run dev
 ```
 
 `/` はメモボード、`/dictionaries` は辞書編集、`/settings` は設定です。
-辞書編集と設定は現在、見出しと戻るリンクのみです。入力した単語はすべて Q4 に入り、
-チップをタップすると移動・編集・削除できます。チップはメモリ上で保持し、リロードすると消えます。
+入力した単語は辞書に従って分類され、一致しない単語は Q4 に入ります。
+チップをタップすると移動・編集・削除できます。メモ・辞書・設定は IndexedDB に保存され、リロード後に復元されます。
 音声入力は入力バーを開いた後、OS キーボードのマイクキーを使います。
 
 ```bash
@@ -197,5 +198,60 @@ npx playwright test --grep @add-quadmemo-quadrant-ui
 bash scripts/check-test-plan.sh --change add-quadmemo-quadrant-ui
 ```
 
-`E2E_BASE_URL` 未指定時は Playwright が開発サーバーを起動します。指定時はその URL を使用します。
+Playwright は `E2E_BASE_URL` が未指定なら開発サーバー（3000）を、`E2E_PWA_BASE_URL` が未指定ならビルド済み preview（3001）を起動します。
+`pwa` プロジェクトは iPhone 13 の表示・タッチ条件を持つ Chromium で preview を、既存プロジェクトは開発サーバーを使います。`pwa` プロジェクトの接続先は `E2E_PWA_BASE_URL` で指定し、既存プロジェクトの接続先は `E2E_BASE_URL` で指定します。各変数が対応するサーバーの起動を個別に省き、両方を指定するとローカルサーバーは起動しません。preview は古い `dist/` の検証を防ぐため既存サーバーを再利用しません。
+Safari 固有の Service Worker・オフライン動作は iPhone 実機で確認します。既存の `mobile-safari` は WebKit で実行します。
 iPhone のキーボード、音声入力、セーフエリアと 1000 件時の操作感は実機で確認します。
+
+## PWA とオフライン検証
+
+```bash
+# preview は Playwright が自動で起動する（手動起動は不要）
+npx playwright test --project=pwa --grep @add-quadmemo-pwa-offline
+```
+
+初回はオンラインで開き、ヘッダーの「オフライン利用可」を待ちます。以後はオフラインで
+再読み込み・メモ操作・辞書編集・設定変更・バックアップを利用できます。キャッシュがない
+オフライン初回訪問では起動できません。開発サーバーでは Service Worker を登録しません。
+
+新バージョンは画面上部の「新しいバージョンがあります」から「更新」を押すと適用されます。
+入力を確定してから押してください。通知は操作するまで残り、勝手には再読み込みしません。
+設定画面のアプリ情報で Service Worker の登録・更新待機状態を確認できます。
+ブラウザでの初回案内は閉じると端末の settings に記録し、standalone では表示しません。
+案内の記録は端末固有なのでバックアップに含めず、インポートでも保持します。
+
+### アイコンの更新
+
+`design/icon.svg` を編集して次を実行し、生成された PNG 3 枚と、編集した生成元の `design/icon.svg` をコミットします。
+既存の Playwright Chromium をローカル変換ツールとして使い、アプリビルドには組み込みません。
+
+```bash
+npx playwright install chromium
+node scripts/generate-icons.mjs
+```
+
+生成サイズは 192 / 512 / apple-touch-icon 180 px。512 px は any と maskable の両方で宣言します。モチーフは中心から
+半径 204.8 px（512 px の 40%）の円内に収まり、マスカブルの安全領域を満たします。
+
+### 配信後の確認とロールバック
+
+```bash
+./scripts/deploy.sh
+curl -sI "https://$TF_VAR_domain_name/sw.js"
+curl -sI "https://$TF_VAR_domain_name/manifest.webmanifest"
+```
+
+`index.html`、上記 2 ファイル、固定名のアイコン 3 ファイルの計 6 パスで `Cache-Control: no-cache` を確認します。`dist/assets/` の実際のハッシュ付き
+ファイルの URL は `public, max-age=31536000, immutable` であることも確認してください。
+iPhone 実機での共有シート・音声入力・機内モード・2 世代の更新確認は
+[受け入れタスク](openspec/changes/add-quadmemo-pwa-offline/tasks.md) に記録します。
+
+通常のロールバックは、対象の旧コミットを別 worktree に取り出し、`npm ci` 後に同じ配信環境の
+変数を読み込み `./scripts/deploy.sh` を実行します。旧成果物の SW も配り直し、利用者は更新通知から
+旧版へ切り替えます。`dist/` を直接差し替えても deploy.sh がビルドし直すため、ソースを戻してください。
+
+SW 自体を撤去するときは **sw.js を削除するだけでは登録解除されません**。
+撤去用の一時コミットで `VitePWA` に `selfDestroying: true` を設定し、`./scripts/deploy.sh` を実行します。
+プラグインが `skipWaiting`・登録解除・管理対象ページの再読み込みを行う撤去用の空 SW を生成します。
+`sw.js` は引き続き `no-cache` で配り、長く未訪問だった端末にも届くよう撤去用 SW を保持します。
+登録解除を実ブラウザで確認してから通常の登録コードを外します。メモ等の IndexedDB は削除しません。

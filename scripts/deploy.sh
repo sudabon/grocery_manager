@@ -18,7 +18,8 @@ fi
 # sync 側は除外分以外を 1 年 immutable で配信するため、ハッシュ名でないファイル
 # (favicon.ico, robots.txt など)を更新できる状態に保つにはこの配列へ追加する。
 # 配列に足せば --exclude と個別アップロードの両方に反映される。
-ENTRYPOINTS=(index.html sw.js registerSW.js manifest.webmanifest)
+ENTRYPOINTS=(index.html sw.js manifest.webmanifest
+  icons/icon-192.png icons/icon-512.png icons/apple-touch-icon-180.png)
 
 npm run build
 

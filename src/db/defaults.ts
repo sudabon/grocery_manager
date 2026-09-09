@@ -1,7 +1,7 @@
 import type { AppSettings, Dictionary } from './schema';
 
 export const defaultSettings: AppSettings = {
-  key: 'app', partialMatch: false, autoCommitMs: 1500, allowDuplicates: true, showDictationHint: true,
+  key: 'app', partialMatch: false, autoCommitMs: 1500, allowDuplicates: true, showDictationHint: true, installHintDismissed: false,
 };
 export function seedDictionaries(now = Date.now()): Dictionary[] {
   return [

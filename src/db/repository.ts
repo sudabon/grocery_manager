@@ -38,13 +38,20 @@ export function createRepository(connect: () => Promise<IDBPDatabase<QuadmemoDb>
         for (const dictionary of data.dictionaries) await tx.objectStore('dictionaries').put(dictionary);
         let added: MemoItem[] = [];
         if (full) {
-          await tx.objectStore('settings').put(data.settings);
+          const current = await tx.objectStore('settings').get('app');
+          // 端末固有の案内記録はインポートで持ち越す（型分割により merge が必須）。
+          const installHintDismissed = current && 'installHintDismissed' in current
+            ? current.installHintDismissed === true : false;
+          const merged: AppSettings = { ...data.settings, installHintDismissed };
+          await tx.objectStore('settings').put(merged);
           const store = tx.objectStore('memos');
           added = skipExistingMemos(data.memos, await store.getAllKeys());
           for (const memo of added) await store.add(memo);
+          await completion;
+          return { ...data, settings: merged, memos: added };
         }
         await completion;
-        return { ...data, memos: added };
+        return { dictionaries: data.dictionaries, settings: undefined, memos: added };
       } catch (error) {
         try { tx.abort(); } catch { /* Already aborted or completed. */ }
         await completion.catch(() => {});
@@ -78,7 +85,9 @@ export function createRepository(connect: () => Promise<IDBPDatabase<QuadmemoDb>
     async saveDictionary(dictionary: Dictionary) { checkWrite(); await (await connect()).put('dictionaries', dictionary); },
     async getSettings(): Promise<AppSettings | undefined> {
       const value = await (await connect()).get('settings', 'app');
-      return value && 'partialMatch' in value ? value : undefined;
+      if (!value || !('partialMatch' in value)) return undefined;
+      // 旧レコードには installHintDismissed が無いため既定値で補う。
+      return Object.assign({ installHintDismissed: false }, value);
     },
     async saveSettings(settings: AppSettings) { checkWrite(); await (await connect()).put('settings', settings); },
     async seed() {

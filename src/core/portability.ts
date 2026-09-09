@@ -1,9 +1,9 @@
 import { QUADRANT_ORDER, type QuadrantId } from './classify';
 import { sanitizeEntries } from './dictEntries';
 import { clampAutoCommitMs } from './settings';
-import type { AppSettings, Dictionary, MemoItem } from '../db/schema';
+import type { PortableSettings, Dictionary, MemoItem } from '../db/schema';
 
-export interface AppData { dictionaries: Dictionary[]; memos: MemoItem[]; settings: AppSettings }
+export interface AppData { dictionaries: Dictionary[]; memos: MemoItem[]; settings: PortableSettings }
 export class ImportFormatError extends Error {}
 const invalid = () => new ImportFormatError('ファイルの形式が正しくないか、対応していない版数です。');
 function record(value: unknown): Record<string, unknown> {
@@ -26,7 +26,7 @@ function dictionaries(value: unknown): Dictionary[] {
   });
   return QUADRANT_ORDER.map((q) => result.find((d) => d.quadrant === q)!);
 }
-function settings(value: unknown): AppSettings {
+function settings(value: unknown): PortableSettings {
   const s = record(value);
   if (typeof s.partialMatch !== 'boolean' || typeof s.allowDuplicates !== 'boolean' ||
     typeof s.showDictationHint !== 'boolean' || !finite(s.autoCommitMs) || (s.key !== undefined && s.key !== 'app')) throw invalid();
@@ -48,7 +48,8 @@ export function dictionaryExport(value: Dictionary[]) { return { version: 1, dic
 export function fullExport(data: AppData, now = new Date()) {
   return { app: 'quadmemo', schemaVersion: 1, exportedAt: now.toISOString(),
     dictionaries: data.dictionaries, memos: data.memos.map(({ id, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt }) =>
-      ({ id, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt })), settings: data.settings };
+      ({ id, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt })),
+    settings: settings(data.settings) };
 }
 export function parseDictionaryImport(text: string): Dictionary[] {
   let parsed: unknown;

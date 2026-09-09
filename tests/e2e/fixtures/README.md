@@ -62,3 +62,21 @@ fixture は各テストの前にべき等に状態を作り直し、テスト間
 | `files/unsupported.json` | schemaVersion 99 の全データを拒否 |
 | `files/collision.json` | 既存 apple と同じ ID で本文・正規化本文が「上書き禁止」のメモと、新しい orange の ID を含む。既存 apple を上書きせず衝突をスキップし新規だけ追加 |
 | `files/all-data.json` | 正常な全データ。上書き確認の中止、復元に使用 |
+## PWA fixtures
+
+`pwa.ts` の fixture 直接方式。`pwa` プロジェクト（iPhone 13 の表示・タッチ条件 / Chromium）は開発サーバーではなく
+ポート 3001 のビルド成果物を使う。`E2E_PWA_BASE_URL` 指定時は `pwa` が指定先を使い、preview は起動しない。
+`E2E_BASE_URL` は既存プロジェクトの接続先と dev の起動省略を制御する。両指定時のみローカルサーバーを両方とも起動しない。
+Safari 固有の Service Worker・オフライン動作は iPhone 実機で確認する（design.md - D6）。
+
+| 状態名 | fixture | 作られる状態 | 使用する TP-ID |
+|---|---|---|---|
+| `env:built-app` | `builtApp` | アプリの「オフライン利用可」表示を待った状態（fixture からページ制御を直接は待たない） | TP-001 / TP-002 / TP-003 / TP-007 / TP-012 |
+| `env:built-app-offline` | `builtAppOffline` | 上記の完了後に context をオフラインへ切り替える | TP-003 / TP-004 / TP-005 / TP-006 |
+| `env:built-app-offline-first-visit` | `builtAppOfflineFirstVisit` | テスト専用 context の別ページでオフライン初回起動を試み、ナビゲーション失敗とアプリシェルの非表示を記録する | TP-013 |
+| `env:sw-update-available` | `swUpdateAvailable` | 実 SW を登録し、ブラウザ API の waiting 状態を注入。通知と非更新時の入力維持を確認する。実適用は実機検証 | TP-007 / TP-008 |
+| `env:display-mode-browser` | `displayModeApp` / `swUpdateAvailable`（`displayModeName: 'browser'`、既定値） | matchMedia と navigator.standalone の両方が false、未案内の初期状態 | TP-007 / TP-008 / TP-009 / TP-010 |
+| `env:display-mode-standalone` | `displayModeApp`（`displayModeName: 'media'` / `'ios'`） | media のみ true / iOS フラグのみ true を別々に検証 | TP-011 |
+
+`externalRequests` は自動 fixture として初回ナビゲーション前から context の要求を収集する。
+各テストは独立した context を使うため、キャッシュや IndexedDB を他テストから引き継がない。

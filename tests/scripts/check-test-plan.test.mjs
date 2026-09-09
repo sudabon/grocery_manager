@@ -14,6 +14,8 @@ async function setup(t, {
   initGit = true,
   commit = true,
   extraBinPath,
+  runtimeReport = { suites: [{ specs: [{ tags: ['my-change', 'TP-001'] }] }] },
+  runtimeExit = 0,
 } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'quadmemo check-test-plan-'));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -21,6 +23,18 @@ async function setup(t, {
   await copyFile(new URL('../../scripts/check-test-plan.sh', import.meta.url),
     join(root, 'scripts', 'check-test-plan.sh'));
   await chmod(join(root, 'scripts', 'check-test-plan.sh'), 0o755);
+
+  // Playwright のプロセス境界をスタブし、実行時 JSON の照合を検証する。
+  const bin = join(root, 'bin');
+  await mkdir(bin);
+  await writeFile(join(bin, 'npx'), `#!/usr/bin/env node
+const assert = require('node:assert/strict');
+assert.deepEqual(process.argv.slice(2), ['playwright', 'test', '--list', '--grep', '@my-change', '--reporter=json']);
+console.log(${JSON.stringify(JSON.stringify(runtimeReport))});
+process.exit(${runtimeExit});
+`);
+  await chmod(join(bin, 'npx'), 0o755);
+  extraBinPath = extraBinPath ? extraBinPath + ':' + bin : bin;
 
   if (makeE2eDir) await mkdir(join(root, 'tests', 'e2e'), { recursive: true });
   for (const [name, content] of Object.entries(specs)) {
@@ -323,4 +337,64 @@ test('差分モードでも未着手の change は @tag を免除する', async 
   const result = run(ctx, ['HEAD~1']);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Pending: my-change/);
+});
+
+test('--change はテンプレート由来の実行時タグと入れ子 suite を照合する', async t => {
+  const ctx = await setup(t, {
+    changes: { 'my-change': { plan: true } },
+    specs: { 'a.spec.ts': "const tag = id => ['@my-change', `@${id}`];" },
+    runtimeReport: { suites: [{ suites: [{ specs: [{ tags: ['my-change', 'TP-001'] }] }] }] },
+  });
+  const result = run(ctx, ['--change', 'my-change']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /TP-ID: my-change 1\/1/);
+});
+
+test('--change は計画だけに追加された TP-ID をすべて stderr に列挙して exit 1', async t => {
+  const ctx = await setup(t, {
+    changes: { 'my-change': { plan: true } },
+    specs: { 'a.spec.ts': "const tag = id => ['@my-change', `@${id}`];" },
+  });
+  await writeFile(join(ctx.root, 'openspec/changes/my-change/test-plan.md'),
+    '| TP-001 | implemented |\n| TP-002 | missing |\n| TP-003 | missing |\n');
+  const result = run(ctx, ['--change', 'my-change']);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /未実装の TP-ID: TP-002, TP-003/);
+});
+
+test('--change は似た change ID やタイトル内の TP-ID で欠落を埋めない', async t => {
+  const ctx = await setup(t, {
+    changes: { 'my-change': { plan: true } },
+    specs: { 'a.spec.ts': "// @my-change TP-001" },
+    runtimeReport: { suites: [{ specs: [
+      { tags: ['my-change-extra', 'TP-001'] },
+      { tags: ['my-change'], title: 'TP-001' },
+    ] }] },
+  });
+  const result = run(ctx, ['--change', 'my-change']);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /未実装の TP-ID: TP-001/);
+});
+
+test('--change は Playwright 一覧取得失敗を欠落と区別して exit 2', async t => {
+  const ctx = await setup(t, {
+    changes: { 'my-change': { plan: true } },
+    specs: { 'a.spec.ts': '// @my-change' },
+    runtimeExit: 1,
+  });
+  const result = run(ctx, ['--change', 'my-change']);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /Playwright テスト一覧を取得できません/);
+  assert.doesNotMatch(result.stderr, /未実装の TP-ID/);
+});
+
+test('--change は不正な一覧を合格にしない', async t => {
+  const ctx = await setup(t, {
+    changes: { 'my-change': { plan: true } },
+    specs: { 'a.spec.ts': '// @my-change' },
+    runtimeReport: { errors: [{ message: 'collection failed' }] },
+  });
+  const result = run(ctx, ['--change', 'my-change']);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /TP-ID 検証に失敗しました/);
 });

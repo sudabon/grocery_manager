@@ -73,7 +73,7 @@ test('引数で渡したエントリポイントのうち S3 にだけあるも�
   const result = await run(t, {
     localFiles: { 'index.html': 'x' },
     input: listing(['index.html', 'sw.js', 'manifest.webmanifest', 'assets/old.js']),
-    entrypoints: ['index.html', 'sw.js', 'registerSW.js', 'manifest.webmanifest'],
+    entrypoints: ['index.html', 'sw.js', 'manifest.webmanifest'],
   });
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.removed, 'yes');

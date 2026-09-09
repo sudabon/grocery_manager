@@ -7,8 +7,11 @@ import { shareExport } from '../core/shareExport';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { SaveFeedback } from '../components/SaveFeedback';
 import { useToast } from '../components/Toast';
+import { usePwaState } from '../pwa/usePwaState';
+import type { PwaState } from '../pwa/registerSW';
 
 export function SettingsPage() {
+  const pwa = usePwaState();
   const settings = useAppStore((state) => state.settings);
   const permission = useAppStore((state) => state.persistencePermission);
   const pendingWrites = useAppStore((state) => state.pendingWrites);
@@ -89,7 +92,14 @@ export function SettingsPage() {
       {!storageAvailable && <p className="help-text">この環境では端末にデータを保存できないため、インポートは失敗する可能性があります。</p>}
       <button type="button" className="secondary-button" disabled={busy || pendingWrites > 0} onClick={() => {
         const state = useAppStore.getState();
-        void shareExport(fullExport({ dictionaries: state.dictionaries, memos: state.chips, settings: state.settings }), exportFileName('export'))
+        let payload: ReturnType<typeof fullExport>;
+        try {
+          payload = fullExport({ dictionaries: state.dictionaries, memos: state.chips, settings: state.settings });
+        } catch {
+          toast.notify('エクスポートできませんでした。もう一度お試しください。');
+          return;
+        }
+        void shareExport(payload, exportFileName('export'))
           .catch(() => toast.notify('エクスポートできませんでした。もう一度お試しください。'));
       }}>全データをエクスポート</button>
       <label className="file-control">全データをインポート<input type="file" accept=".json,application/json" disabled={busy || pendingWrites > 0} onChange={(event) => {
@@ -102,6 +112,10 @@ export function SettingsPage() {
     </section>
     <section className="settings-section" aria-label="アプリ情報"><h3>アプリ情報</h3>
       <p>バージョン {import.meta.env.VITE_APP_VERSION}</p>
+      <p>Service Worker：{({
+        checking: '確認中', unsupported: 'この環境は非対応です', failed: '登録できませんでした',
+        registered: '登録済み', waiting: '更新待機中',
+      } satisfies Record<PwaState['status'], string>)[pwa.status]}</p>
       <p>ストレージ永続化：{permission === null ? '確認中' : { granted: '許可されています', denied: '許可されていません', unsupported: 'この環境は非対応です' }[permission]}</p>
       <p>メモ・辞書・設定は端末内に保存します。アプリから外部へのネットワーク送信は行いません。エクスポートは利用者が選んだ保存先へ渡します。</p>
     </section>

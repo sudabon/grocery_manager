@@ -2,11 +2,14 @@ import { expect, it } from 'vitest';
 import { defaultSettings, seedDictionaries } from '../../db/defaults';
 import { dictionaryExport, exportFileName, fullExport, ImportFormatError, parseDictionaryImport, parseFullImport, skipExistingMemos } from '../portability';
 const memo = { id: 'a', rawText: 'パン', normText: 'ぱん', quadrant: 'q2' as const, matchedEntry: 'パン', autoClassified: true, createdAt: 1, updatedAt: 1 };
-const data = () => ({ dictionaries: seedDictionaries(1), memos: [memo], settings: { ...defaultSettings } });
+const { installHintDismissed: _deviceSetting, ...portableSettings } = defaultSettings;
+const data = () => ({ dictionaries: seedDictionaries(1), memos: [memo], settings: { ...portableSettings } });
 it('辞書と全データを往復でき、一時表示フラグは出力しない', () => {
   expect(parseDictionaryImport(JSON.stringify(dictionaryExport(data().dictionaries)))).toEqual(data().dictionaries);
   expect(parseFullImport(JSON.stringify(fullExport(data())))).toEqual(data());
   expect(fullExport({ ...data(), memos: [{ ...memo, unsaved: true } as typeof memo] }).memos[0]).not.toHaveProperty('unsaved');
+  const deviceSettings = { ...defaultSettings, installHintDismissed: true };
+  expect(fullExport({ ...data(), settings: deviceSettings }).settings).not.toHaveProperty('installHintDismissed');
   expect(parseFullImport(JSON.stringify(fullExport({ ...data(), memos: [] }))).memos).toEqual([]);
 });
 it.each(['{', 'null', '[]', '{"version":2}', '{"version":1}'])('不正な辞書JSONを拒否: %s', (text) => {
@@ -36,4 +39,11 @@ it('日付を含むファイル名', () => {
   const date = new Date('2026-09-08T10:00:00Z');
   expect(exportFileName('export', date)).toBe('quadmemo-export-2026-09-08.json');
   expect(exportFileName('dictionaries', date)).toBe('quadmemo-dictionaries-2026-09-08.json');
+});
+it('可搬設定だけを出力し、往復できる', () => {
+  const exported = fullExport(data());
+  expect(() => fullExport(data())).not.toThrow();
+  expect(exported.settings).not.toHaveProperty('installHintDismissed');
+  expect(() => parseFullImport(JSON.stringify(exported))).not.toThrow();
+  expect(parseFullImport(JSON.stringify(exported)).settings).toEqual(portableSettings);
 });
