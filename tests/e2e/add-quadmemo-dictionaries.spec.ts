@@ -146,9 +146,9 @@ test.describe('共有対応', () => {
   test.use({ shareMode: 'env:web-share-stub' });
   test('共有対応ならエクスポートファイルを共有へ渡す', tags('TP-029'), async ({ dictionaries, settingsPage, readSharedFiles }) => {
     await dictionaries.open(); await dictionaries.exportButton.click(); await expect.poll(readSharedFiles).toHaveLength(1);
-    let [file] = await readSharedFiles(); expect(file.name).toMatch(/^quadmemo-dictionaries-.*\.json$/); expect(JSON.parse(file.text).version).toBe(1);
+    let [file] = await readSharedFiles(); expect(file.name).toMatch(/^quadmemo-dictionaries-.*\.json$/); expect(file.type).toBe('application/json'); expect(JSON.parse(file.text!).version).toBe(1);
     await settingsPage.open(); await settingsPage.exportButton.click(); await expect.poll(async () => (await readSharedFiles())[0]?.name).toMatch(/^quadmemo-export-/);
-    [file] = await readSharedFiles(); expect(JSON.parse(file.text).schemaVersion).toBe(1);
+    [file] = await readSharedFiles(); expect(file.type).toBe('application/json'); expect(JSON.parse(file.text!).schemaVersion).toBe(1);
   });
 });
 test('保存ボタンを連打してもエントリは重複しない', tags('TP-030'), async ({ dictionaries }) => {

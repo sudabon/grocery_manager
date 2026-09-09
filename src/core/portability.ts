@@ -77,6 +77,8 @@ export function skipExistingMemos(incoming: MemoItem[], existingIds: Iterable<st
     return true;
   });
 }
-export function exportFileName(kind: 'export' | 'dictionaries', date = new Date()): string {
-  return `quadmemo-${kind}-${date.toISOString().slice(0, 10)}.json`;
+// 'board' だけは復元できない参照用画像なので拡張子が異なる（board-image-share design - D2）。
+const exportExtension = { export: 'json', dictionaries: 'json', board: 'png' } as const;
+export function exportFileName(kind: keyof typeof exportExtension, date = new Date()): string {
+  return `quadmemo-${kind}-${date.toISOString().slice(0, 10)}.${exportExtension[kind]}`;
 }
