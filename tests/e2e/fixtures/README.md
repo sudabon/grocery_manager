@@ -79,6 +79,47 @@ fixture は各テストの前にべき等に状態を作り直し、テスト間
 | `env:no-web-share`（再利用） | navigator.share / canShare を無効化しダウンロードへ固定 | TP-004 |
 | `env:built-app-offline`（再利用） | 下表の PWA fixture。共有スタブを重ねて切断状態から実行する | TP-008 |
 
+## 日付ごとのボード（add-quadmemo-daily-boards）
+
+`daily-boards.ts` は `dictionaries.ts` を拡張し、`history`（日付の一覧の Page Object）を足す。
+状態は `classificationSeed`、時刻は `clockMode`、共有環境は `shareMode` で選ぶ。
+
+| fixture 名 | 作られる状態 | 使用する TP-ID | 方式 |
+|-----------|-------------|---------------|------|
+| `env:fixed-clock` | `addInitScript` で `Date.now()` と引数なしの `new Date()` を JST 2026-09-09 12:00 に固定する（`clockMode` の既定値）。タイマーには触らない | daily-boards: TP-002, 004〜023 ほか、**下記のとおり既存の全 change** | fixture 直接方式 |
+| `env:clock-advanced` | 上記に加え、`clock.advanceToNextDay()` で固定時刻を JST 2026-09-10 12:00 へ進められる。差し替えは再読み込み後も残る | daily-boards: TP-001, TP-003 | fixture 直接方式 |
+| `env:live-clock` | 時刻を固定しない（既存の挙動）。日付に依存しないテストのための逃げ道で、現在は使用していない | なし | fixture 直接方式 |
+| `seed:boards-across-days` | 2026-09-09（当日）に Q1 apple、2026-09-08 に Q2 ぱん・Q3 卵、2026-09-06 に Q3 牛乳。2026-09-07 は空。基本辞書・既定設定 | daily-boards: TP-001, 003〜005, 007〜009, 013, 015, 021 | fixture 直接方式 |
+| `seed:legacy-memos-without-date` | `boardDate` を持たない version 1 相当のメモ 3 件（作成時刻は JST 2026-09-09 0:30 / 2026-09-08 23:30 / 2026-09-06 12:00）。アプリの接続で version 2 へ移行される | daily-boards: TP-014 | fixture 直接方式 |
+| `seed:dict-basic`（再利用） | 基本辞書・既定設定・メモ 0 件 | daily-boards: TP-002, 011, 016, 023 | fixture 直接方式 |
+| `seed:memos-across-quadrants`（再利用） | Q1 apple / Q2 ぱん / Q3 牛乳。**boardDate は固定時刻の当日**（2026-09-09） | daily-boards: TP-006, 010, 012, 017, 019 | fixture 直接方式 |
+| `seed:dict-all-empty`（再利用） | 全象限とも空エントリ・メモ 0 件 | daily-boards: TP-022 | fixture 直接方式 |
+| `env:web-share-stub`（再利用） | share / canShare をスタブする | daily-boards: TP-015, 018, 020〜022 | fixture 直接方式 |
+| `env:no-web-share`（再利用） | share / canShare を無効化しダウンロードへ固定（`shareMode` の既定値） | daily-boards: TP-019 | fixture 直接方式 |
+
+| 固定ファイル | 用途 | 使用する TP-ID |
+|---|---|---|
+| `files/legacy-v1.json` | `schemaVersion` 1 の全データ。メモ 3 件は `boardDate` を持たず、作成時刻は JST 2026-09-09 0:30 / 2026-09-08 23:30 / 2026-09-06 12:00 | daily-boards: TP-016 |
+| `files/unsupported.json`（再利用） | `schemaVersion` 99 の全データを拒否 | daily-boards: TP-017 |
+
+### 時刻固定の適用範囲（`env:fixed-clock`）
+
+ボードは当日の日付で始まるため、日付が変わる瞬間に走ると**どの change の E2E でも**前提が崩れる。
+そのため時刻固定は本 change のテストだけでなく、**メモを IndexedDB へ投入する既存 fixture すべて**へ適用した。
+
+- `classification.ts` の `memo` fixture（`clockMode` 既定 `env:fixed-clock`）。これを継承する
+  `dictionaries.ts` / `board-image-share.ts` / `daily-boards.ts` の全テストが対象。
+  したがって `add-quadmemo-classification` / `add-quadmemo-dictionaries` / `add-quadmemo-memo-length-limit` /
+  `add-quadmemo-board-image-share` / `update-quadmemo-fixed-labels` も固定時刻で動く。
+- `memo-board.ts` の自動 fixture（`add-quadmemo-quadrant-ui`）。
+- 投入するメモの `boardDate` は固定時刻と同じ日（2026-09-09）で、`createdAt` も同日 9:00 に揃えた。
+- `files/all-data.json` と `files/collision.json`（`schemaVersion` 1）の `createdAt` も同日に更新した。
+  インポート時に `createdAt` から `boardDate` を埋めるため、当日のボードへ現れる前提を保つのに必要。
+- `pwa.ts`（`add-quadmemo-pwa-offline` / `add-quadmemo-board-image-share-offline`）と
+  `deployed-origin.ts` は**適用しない**。メモを投入せず、日付そのものを検証しないため
+  （ファイル名は日付の桁数だけを正規表現で見ている）。Service Worker の登録・更新の
+  タイミングへ余計な影響を与えないことを優先した。
+
 ## PWA fixtures
 
 `pwa.ts` の fixture 直接方式。`pwa` プロジェクト（iPhone 13 の表示・タッチ条件 / Chromium）は開発サーバーではなく

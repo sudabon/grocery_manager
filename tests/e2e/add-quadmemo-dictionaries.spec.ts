@@ -47,7 +47,7 @@ test.describe('既存メモを持つ状態', () => {
     await dictionaries.open(); await dictionaries.entries.fill('orange'); await dictionaries.save();
     await settingsPage.open(); await settingsPage.partial.check(); await settingsPage.saved(); await settingsPage.setWait(700);
     const download = await settingsPage.export(); const before = await readDownload(download); const path = (await download.path())!;
-    expect(before).toMatchObject({ app: 'quadmemo', schemaVersion: 1, exportedAt: expect.any(String) });
+    expect(before).toMatchObject({ app: 'quadmemo', schemaVersion: 2, exportedAt: expect.any(String) });
     await settingsPage.clear(); await settingsPage.partial.uncheck(); await settingsPage.saved();
     await dictionaries.open(); await dictionaries.entries.fill('changed'); await dictionaries.save();
     await settingsPage.open(); await settingsPage.import(path); await settingsPage.acceptImport(); await settingsPage.reload();
@@ -89,7 +89,9 @@ test('部分一致ONが分類へ反映される', tags('TP-011'), async ({ setti
   await memo.start(); await memo.add('apples'); await expect(memo.quadrantChips(1)).toHaveText(['apples']);
 });
 test('待機時間を500msへ変更するとその時間で自動コミットする', tags('TP-012'), async ({ settingsPage, memo, page }) => {
-  await settingsPage.open(); await settingsPage.setWait(500); await settingsPage.back(); await page.clock.install({ time: new Date('2026-09-08T00:00:00Z') }); await page.clock.pauseAt(new Date('2026-09-08T00:00:01Z'));
+  // 注入する時刻は `env:fixed-clock` と同じ JST 2026-09-09 にする。別の日付にすると
+  // 表示中のボードが当日でなくなり、コミットが拒否される（daily-boards design - D4）。
+  await settingsPage.open(); await settingsPage.setWait(500); await settingsPage.back(); await page.clock.install({ time: new Date('2026-09-09T03:00:00Z') }); await page.clock.pauseAt(new Date('2026-09-09T03:00:01Z'));
   await memo.start(); await memo.input.fill('apple'); await page.clock.runFor(499); await expect(memo.chips).toHaveCount(0);
   await page.clock.runFor(1); await expect(memo.quadrantChips(1)).toHaveText(['apple']);
 });
@@ -138,7 +140,7 @@ test('正しい辞書をインポートすると4象限が置き換わり分類�
 });
 test('共有非対応では日付付きJSONをダウンロードできる', tags('TP-028'), async ({ settingsPage }) => {
   await settingsPage.open(); const download = await settingsPage.export(); expect(download.suggestedFilename()).toMatch(/^quadmemo-export-\d{4}-\d{2}-\d{2}\.json$/);
-  expect((await readDownload(download)).schemaVersion).toBe(1);
+  expect((await readDownload(download)).schemaVersion).toBe(2);
 });
 test.describe('共有対応', () => {
   test.use({ shareMode: 'env:web-share-stub' });
@@ -146,7 +148,7 @@ test.describe('共有対応', () => {
     await dictionaries.open(); await dictionaries.exportButton.click(); await expect.poll(readSharedFiles).toHaveLength(1);
     let [file] = await readSharedFiles(); expect(file.name).toMatch(/^quadmemo-dictionaries-.*\.json$/); expect(file.type).toBe('application/json'); expect(JSON.parse(file.text!).version).toBe(1);
     await settingsPage.open(); await settingsPage.exportButton.click(); await expect.poll(async () => (await readSharedFiles())[0]?.name).toMatch(/^quadmemo-export-/);
-    [file] = await readSharedFiles(); expect(file.type).toBe('application/json'); expect(JSON.parse(file.text!).schemaVersion).toBe(1);
+    [file] = await readSharedFiles(); expect(file.type).toBe('application/json'); expect(JSON.parse(file.text!).schemaVersion).toBe(2);
   });
 });
 test('保存ボタンを連打してもエントリは重複しない', tags('TP-030'), async ({ dictionaries }) => {

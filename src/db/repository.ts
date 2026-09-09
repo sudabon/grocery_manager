@@ -64,9 +64,23 @@ export function createRepository(connect: () => Promise<IDBPDatabase<QuadmemoDb>
         throw error;
       }
     },
-    async getMemos(quadrant?: QuadrantId) {
+    /** 表示中のボードのチップを読む用途が主なので、日付と象限のどちらでも絞れる形にする。 */
+    async getMemos(filter: { quadrant?: QuadrantId; boardDate?: string } = {}) {
       const db = await connect();
-      return (await (quadrant ? db.getAllFromIndex('memos', 'quadrant', quadrant) : db.getAll('memos'))).sort(byCreation);
+      const { quadrant, boardDate } = filter;
+      const memos = boardDate !== undefined ? await db.getAllFromIndex('memos', 'boardDate', boardDate)
+        : quadrant !== undefined ? await db.getAllFromIndex('memos', 'quadrant', quadrant)
+        : await db.getAll('memos');
+      // 索引を 1 つしか使えないので、もう一方は取得後に絞る。
+      return memos.filter((memo) => (quadrant === undefined || memo.quadrant === quadrant)).sort(byCreation);
+    },
+    /** チップが 1 件以上ある日付を新しい順で返す。索引キーの降順走査なので全件を読み込まない。 */
+    async getBoardDates(): Promise<string[]> {
+      const db = await connect();
+      const index = db.transaction('memos').store.index('boardDate');
+      const dates: string[] = [];
+      for (let cursor = await index.openKeyCursor(null, 'prevunique'); cursor; cursor = await cursor.continue()) dates.push(cursor.key);
+      return dates;
     },
     async putMemos(memos: MemoItem[]) {
       checkWrite();

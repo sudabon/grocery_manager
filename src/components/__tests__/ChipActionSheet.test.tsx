@@ -9,7 +9,7 @@ import { useAppStore } from '../../store/useAppStore';
 beforeEach(() => {
   document.body.innerHTML = '<div id="app-shell"></div>';
   useAppStore.setState({
-    chips: [{ id: 'a', rawText: 'apple', normText: 'apple', quadrant: 'q1', matchedEntry: null, autoClassified: false, createdAt: 1, updatedAt: 1 }],
+    chips: [{ id: 'a', boardDate: '2026-09-09', rawText: 'apple', normText: 'apple', quadrant: 'q1', matchedEntry: null, autoClassified: false, createdAt: 1, updatedAt: 1 }],
     dictionaries: seedDictionaries(), settings: { ...defaultSettings },
   });
 });

@@ -1,3 +1,4 @@
+import { boardDateLabel } from './boardDate';
 import type { QuadrantId } from './classify';
 import { QUADRANT_LABELS } from '../db/defaults';
 import type { MemoItem } from '../db/schema';
@@ -11,13 +12,16 @@ export interface BoardImageCell { quadrant: QuadrantId; label: string; texts: st
  * 「どの象限にどのラベルとどの本文が載るか」はこの純粋関数で担保する（design.md - D5）。
  */
 export function boardImageLayout(
-  chips: readonly Pick<MemoItem, 'quadrant' | 'rawText'>[],
+  chips: readonly Pick<MemoItem, 'quadrant' | 'rawText' | 'boardDate'>[],
+  boardDate: string,
 ): BoardImageCell[] {
+  // 対象は表示中のボードの日付だけ。他の日付のチップは画像に含めない（spec: 他の日付のチップは含まれない）。
+  const board = chips.filter((chip) => chip.boardDate === boardDate);
   return BOARD_IMAGE_ORDER.map((quadrant) => ({
     quadrant,
     label: QUADRANT_LABELS[quadrant],
-    // chips は追加順の配列なので、filter がそのまま画面の並び順になる。
-    texts: chips.filter((chip) => chip.quadrant === quadrant).map((chip) => chip.rawText),
+    // board は追加順の配列なので、filter がそのまま画面の並び順になる。
+    texts: board.filter((chip) => chip.quadrant === quadrant).map((chip) => chip.rawText),
   }));
 }
 
@@ -25,6 +29,8 @@ export function boardImageLayout(
 const FONT_STACK = '-apple-system, BlinkMacSystemFont, "Helvetica Neue", "Noto Sans JP", sans-serif';
 const COLORS = { grid: '#bfc8bf', cell: ['#f8f3e9', '#eff3ed', '#f2efea', '#eef1f2'], text: '#283c35', muted: '#637267', chip: '#fffdf8', chipBorder: '#728379' };
 const WIDTH = 1080, GAP = 2, PADDING = 32;
+// 4 象限の上に日付の帯を足す。最悪ケースの高さは 8266 + 96 = 8362px で、iOS の面積上限に収まる。
+const TITLE_HEIGHT = 96, TITLE_SIZE = 36;
 const HEADING_SIZE = 30, CHIP_SIZE = 28, LINE_HEIGHT = 40;
 const HEADING_HEIGHT = 68, CHIP_PADDING_X = 18, CHIP_PADDING_Y = 14, CHIP_GAP = 12, MIN_CELL_HEIGHT = 300;
 
@@ -61,7 +67,7 @@ function dataUrlToFile(dataUrl: string, name: string): File {
  * レイアウトから PNG の File を同期的に組み立てる。ユーザージェスチャを失わないため
  * toBlob ではなく toDataURL を使う（design.md - D2）。
  */
-export function boardImageFile(layout: BoardImageCell[], name: string): File {
+export function boardImageFile(layout: BoardImageCell[], name: string, boardDate: string): File {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('この環境ではキャンバスを利用できません。');
@@ -77,13 +83,19 @@ export function boardImageFile(layout: BoardImageCell[], name: string): File {
   const rows = [Math.max(cells[0].height, cells[1].height), Math.max(cells[2].height, cells[3].height)];
   // 高さの指定でコンテキストの状態が初期化されるので、以降で font と色を指定し直す。
   canvas.width = WIDTH;
-  canvas.height = rows[0] + rows[1] + GAP;
+  canvas.height = TITLE_HEIGHT + rows[0] + rows[1] + GAP;
   ctx.textBaseline = 'top';
   ctx.fillStyle = COLORS.grid;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // どの日の買い物リストかを画像だけで読み取れるようにする（spec: 画像にそのボードの日付が含まれる）。
+  ctx.fillStyle = COLORS.cell[0];
+  ctx.fillRect(0, 0, WIDTH, TITLE_HEIGHT);
+  ctx.fillStyle = COLORS.text;
+  ctx.font = `600 ${TITLE_SIZE}px ${FONT_STACK}`;
+  ctx.fillText(boardDateLabel(boardDate), PADDING, (TITLE_HEIGHT - TITLE_SIZE) / 2 - 4, WIDTH - PADDING * 2);
   cells.forEach((cell, index) => {
     const x = index % 2 === 0 ? 0 : columnWidth + GAP;
-    const y = index < 2 ? 0 : rows[0] + GAP;
+    const y = TITLE_HEIGHT + (index < 2 ? 0 : rows[0] + GAP);
     const rowHeight = rows[index < 2 ? 0 : 1];
     ctx.fillStyle = COLORS.cell[index];
     ctx.fillRect(x, y, columnWidth, rowHeight);

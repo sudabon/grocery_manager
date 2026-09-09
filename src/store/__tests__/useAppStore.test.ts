@@ -1,15 +1,19 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createAppStore, type MemoItem } from '../useAppStore';
+import { todayBoardDate } from '../../core/boardDate';
 import { defaultSettings, seedDictionaries } from '../../db/defaults';
 import type { Repository } from '../../db/repository';
 
-const chip = (id: string): MemoItem => ({ id, rawText: '牛乳', normText: '牛乳', quadrant: 'q4', matchedEntry: null, autoClassified: true, createdAt: 1, updatedAt: 1 });
+const BOARD = '2026-09-09';
+const NOW = Date.parse(`${BOARD}T12:00:00+09:00`);
+const chip = (id: string): MemoItem => ({ id, boardDate: BOARD, rawText: '牛乳', normText: '牛乳', quadrant: 'q4', matchedEntry: null, autoClassified: true, createdAt: 1, updatedAt: 1 });
 let repo: Repository;
 let store: ReturnType<typeof createAppStore>;
 beforeEach(() => {
   repo = {
     getAllData: vi.fn(), applyImport: vi.fn(),
     getMemos: vi.fn().mockResolvedValue([]), putMemos: vi.fn().mockResolvedValue(undefined),
+    getBoardDates: vi.fn().mockResolvedValue([]),
     removeMemo: vi.fn().mockResolvedValue(undefined), clearMemos: vi.fn().mockResolvedValue(undefined),
     getDictionaries: vi.fn().mockResolvedValue(seedDictionaries()), saveDictionary: vi.fn(),
     getSettings: vi.fn().mockResolvedValue(defaultSettings), saveSettings: vi.fn(),
@@ -263,4 +267,106 @@ it.each(['add', 'edit', 'move', 'remove'] as const)('インポート中の%sは�
   if (operation === 'add') expect(result).toEqual({ added: 0, rejected: 1 });
   else if (operation !== 'remove') expect(result).toEqual({ ok: false, reason: 'quadrant-limit' });
   expect(store.getState().chips).toEqual(operation === 'remove' ? [original] : [imported, original]);
+});
+
+const PAST = '2026-09-08';
+const pastChip = (id: string): MemoItem => ({ ...chip(id), boardDate: PAST });
+/** 固定時刻の当日ボードから始め、過去のボードへ切り替えたストアを返す。 */
+async function viewingPastBoard() {
+  vi.useFakeTimers(); vi.setSystemTime(NOW);
+  store = createAppStore(repo, async () => 'granted');
+  vi.mocked(repo.getMemos).mockResolvedValue([chip('today')]);
+  await store.getState().initialize();
+  vi.mocked(repo.getMemos).mockResolvedValue([pastChip('past')]);
+  await store.getState().viewBoard(PAST);
+  vi.mocked(repo.putMemos).mockClear(); vi.mocked(repo.removeMemo).mockClear();
+  return store.getState();
+}
+it('起動時は当日のボードだけを読み、日付を状態に持つ', async () => {
+  vi.useFakeTimers(); vi.setSystemTime(NOW);
+  store = createAppStore(repo, async () => 'granted');
+  vi.mocked(repo.getMemos).mockResolvedValue([chip('a')]);
+  await store.getState().initialize();
+  expect(repo.getMemos).toHaveBeenCalledWith({ boardDate: BOARD });
+  expect(store.getState()).toMatchObject({ viewingBoardDate: BOARD, viewingIsToday: true });
+  expect(store.getState().chips.map((item) => item.id)).toEqual(['a']);
+});
+it('ボードを切り替えるとその日付のチップだけを読み、当日でないことを保持する', async () => {
+  const actions = await viewingPastBoard();
+  expect(repo.getMemos).toHaveBeenLastCalledWith({ boardDate: PAST });
+  expect(store.getState()).toMatchObject({ viewingBoardDate: PAST, viewingIsToday: false });
+  expect(store.getState().chips.map((item) => item.id)).toEqual(['past']);
+  // 当日へ戻すと当日のチップを読み直す。
+  vi.mocked(repo.getMemos).mockResolvedValue([chip('today')]);
+  await actions.viewBoard(BOARD);
+  expect(store.getState()).toMatchObject({ viewingBoardDate: BOARD, viewingIsToday: true });
+  expect(store.getState().chips.map((item) => item.id)).toEqual(['today']);
+});
+it('同じ日付への切り替えは読み直さない', async () => {
+  vi.useFakeTimers(); vi.setSystemTime(NOW);
+  store = createAppStore(repo, async () => 'granted');
+  await store.getState().initialize();
+  vi.mocked(repo.getMemos).mockClear();
+  await store.getState().viewBoard(BOARD);
+  expect(repo.getMemos).not.toHaveBeenCalled();
+});
+it('過去のボード表示中は追加・移動・編集・削除のどれも状態を変えない', async () => {
+  const actions = await viewingPastBoard();
+  const before = store.getState().chips;
+  expect(await actions.addChips([chip('new')])).toEqual({ added: 0, rejected: 0, readOnly: true });
+  expect(await actions.moveChip('past', 'q1')).toEqual({ ok: false, reason: 'read-only' });
+  expect(await actions.editChip('past', '変更後')).toEqual({ ok: false, reason: 'read-only' });
+  await actions.removeChip('past');
+  expect(store.getState().chips).toBe(before);
+  expect(repo.putMemos).not.toHaveBeenCalled();
+  expect(repo.removeMemo).not.toHaveBeenCalled();
+  // 空文字への編集は削除へ回るが、その削除も拒否される。
+  expect(await actions.editChip('past', '   ')).toEqual({ ok: false, reason: 'read-only' });
+  expect(store.getState().chips).toBe(before);
+});
+it('書き込みの瞬間に日付が変わっていれば表示中のボードでも拒否する', async () => {
+  vi.useFakeTimers(); vi.setSystemTime(NOW);
+  store = createAppStore(repo, async () => 'granted');
+  vi.mocked(repo.getMemos).mockResolvedValue([chip('a')]);
+  await store.getState().initialize();
+  const actions = store.getState();
+  vi.mocked(repo.putMemos).mockClear();
+  // 表示したまま日付が変わる。
+  vi.setSystemTime(NOW + 24 * 60 * 60 * 1000);
+  expect(todayBoardDate()).not.toBe(BOARD);
+  const before = store.getState().chips;
+  expect(await actions.addChips([chip('new')])).toEqual({ added: 0, rejected: 0, readOnly: true });
+  expect(await actions.moveChip('a', 'q1')).toEqual({ ok: false, reason: 'read-only' });
+  expect(await actions.editChip('a', '変更後')).toEqual({ ok: false, reason: 'read-only' });
+  await actions.removeChip('a');
+  expect(store.getState().chips).toBe(before);
+  expect(repo.putMemos).not.toHaveBeenCalled();
+  expect(repo.removeMemo).not.toHaveBeenCalled();
+  // 表示中のボードは切り替えず、見え方も選んだ時点のまま保つ。
+  expect(store.getState()).toMatchObject({ viewingBoardDate: BOARD, viewingIsToday: true });
+});
+it('追加したチップは表示中のボードの日付に属する', async () => {
+  vi.useFakeTimers(); vi.setSystemTime(NOW);
+  store = createAppStore(repo, async () => 'granted');
+  await store.getState().initialize();
+  await store.getState().addChips([{ ...chip('a'), boardDate: '1970-01-01' } as MemoItem]);
+  expect(store.getState().chips[0].boardDate).toBe(BOARD);
+  expect(vi.mocked(repo.putMemos).mock.calls[0][0][0]).toMatchObject({ id: 'a', boardDate: BOARD });
+});
+it('日付の一覧は保存層に委譲し、失敗時は空で保存不可にする', async () => {
+  vi.mocked(repo.getBoardDates).mockResolvedValue([BOARD, PAST]);
+  expect(await store.getState().listBoardDates()).toEqual([BOARD, PAST]);
+  vi.mocked(repo.getBoardDates).mockRejectedValue(new Error('blocked'));
+  expect(await store.getState().listBoardDates()).toEqual([]);
+  expect(store.getState().storageAvailable).toBe(false);
+});
+it('インポートしたメモのうち表示中のボードの日付だけを画面に載せる', async () => {
+  vi.useFakeTimers(); vi.setSystemTime(NOW);
+  store = createAppStore(repo, async () => 'granted');
+  vi.mocked(repo.getMemos).mockResolvedValue([]);
+  await store.getState().initialize();
+  const incoming = { dictionaries: seedDictionaries(), memos: [chip('today'), pastChip('past')], settings: { ...defaultSettings } };
+  vi.mocked(repo.applyImport).mockResolvedValue({ ...incoming, settings: { ...defaultSettings } });
+  expect(await store.getState().importData(incoming)).toBe(true);
+  expect(store.getState().chips.map((item) => item.id)).toEqual(['today']);
 });

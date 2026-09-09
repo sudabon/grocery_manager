@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { todayBoardDate } from '../core/boardDate';
 import { buildNormalizedDicts, type NormalizedDicts, type QuadrantId } from '../core/classify';
 import { sanitizeEntries } from '../core/dictEntries';
 import { clampAutoCommitMs } from '../core/settings';
@@ -10,10 +11,22 @@ import { repository, requestPersistence, type PersistencePermission, type Reposi
 import type { AppSettings, Dictionary, MemoItem } from '../db/schema';
 
 export type { MemoItem, QuadrantId };
-export type ChipOpResult = { ok: true } | { ok: false; reason: 'quadrant-limit' | 'not-found' };
-export interface AddChipsResult { added: number; rejected: number }
+export type ChipOpResult = { ok: true } | { ok: false; reason: 'quadrant-limit' | 'not-found' | 'read-only' };
+export interface AddChipsResult { added: number; rejected: number; readOnly?: boolean }
+/** 当日でないボードへの書き込みを断ったときの案内（design.md - Risks / Trade-offs）。 */
+export const BOARD_READ_ONLY_MESSAGE = '日付が変わりました。次にメモ画面を開くと当日のボードが表示されます。';
 export interface ChipItem extends MemoItem { unsaved?: boolean; highlighted?: boolean }
+/** 追加時に渡すチップ。所属する日付は表示中のボードから決まるので呼び出し側は持たない（design.md - D4）。 */
+export type NewMemo = Omit<MemoItem, 'boardDate'>;
 interface AppStore {
+  /** 表示中のボードの日付（JST の `YYYY-MM-DD`）。 */
+  viewingBoardDate: string;
+  /**
+   * 表示中のボードが当日かどうか。ボードを選んだ時点の判定を保持する。
+   * 表示中に日付が変わってもボードを切り替えない（spec: 表示中のボードは切り替えない）ため、
+   * 画面の見え方はこの値に従い、書き込みの可否だけは毎回 `todayBoardDate()` で判定する。
+   */
+  viewingIsToday: boolean;
   chips: ChipItem[];
   dictionaries: Dictionary[];
   normalizedDicts: NormalizedDicts;
@@ -25,8 +38,11 @@ interface AppStore {
   saveErrors: { text: string }[];
   pendingWrites: number;
   initialize: () => Promise<void>;
+  viewBoard: (boardDate: string) => Promise<void>;
+  listBoardDates: () => Promise<string[]>;
+  listAllMemos: () => Promise<MemoItem[] | null>;
   dismissSaveError: () => void;
-  addChips: (chips: MemoItem[]) => Promise<AddChipsResult>;
+  addChips: (chips: NewMemo[]) => Promise<AddChipsResult>;
   moveChip: (id: string, quadrant: QuadrantId) => Promise<ChipOpResult>;
   editChip: (id: string, text: string) => Promise<ChipOpResult>;
   removeChip: (id: string) => Promise<void>;
@@ -38,8 +54,8 @@ interface AppStore {
 }
 // Strip transient display flags before writing a memo back to IndexedDB.
 function persisted(chip: ChipItem): MemoItem {
-  const { id, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt } = chip;
-  return { id, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt };
+  const { id, boardDate, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt } = chip;
+  return { id, boardDate, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt };
 }
 export function createAppStore(repo: Repository = repository, persist = requestPersistence) {
   let initialization: Promise<void> | undefined;
@@ -106,7 +122,11 @@ export function createAppStore(repo: Repository = repository, persist = requestP
         highlights.delete(id);
       }, 1800));
     }
+    // 書き込みは表示中のボードが当日のときだけ許す（design.md - D4）。判定は毎回いまの日付で行うので、
+    // ボードを表示したまま日付が変わった場合も、その瞬間から前日のボードへは書けない。
+    function writable() { return get().viewingBoardDate === todayBoardDate(); }
     return {
+      viewingBoardDate: todayBoardDate(), viewingIsToday: true,
       chips: [], dictionaries: seedDictionaries(), normalizedDicts: buildNormalizedDicts([]),
       settings: { ...defaultSettings }, ready: false, dataLoaded: false, storageAvailable: true,
       persistencePermission: null, saveErrors: [], pendingWrites: 0,
@@ -118,9 +138,12 @@ export function createAppStore(repo: Repository = repository, persist = requestP
           // Seeding is a write; its failure must not discard memos that can still be read.
           try { await repo.seed(); } catch { storageAvailable = false; }
         }
+        // 起動時は必ず当日のボードを表示し、その日付のチップだけを読む（design.md - D3）。
+        const viewingBoardDate = todayBoardDate();
+        set({ viewingBoardDate, viewingIsToday: true });
         try {
           const [chips, dictionaries, settings] = await Promise.all([
-            repo.getMemos(), repo.getDictionaries(), repo.getSettings(),
+            repo.getMemos({ boardDate: viewingBoardDate }), repo.getDictionaries(), repo.getSettings(),
           ]);
           const loadedDicts = dictionaries.length ? dictionaries : seedDictionaries();
           set({ chips, dictionaries: loadedDicts, normalizedDicts: buildNormalizedDicts(loadedDicts), settings: settings ?? { ...defaultSettings }, dataLoaded: true });
@@ -131,10 +154,33 @@ export function createAppStore(repo: Repository = repository, persist = requestP
         }
         set({ ready: true, storageAvailable });
       })(),
+      viewBoard: async (boardDate) => {
+        // 同じボードの読み直しはしない。保存に失敗して画面にだけ残るチップを消さないため。
+        if (get().viewingBoardDate === boardDate) return;
+        set({ viewingBoardDate: boardDate, viewingIsToday: boardDate === todayBoardDate(), chips: [] });
+        try {
+          const chips = await repo.getMemos({ boardDate });
+          // 読み込み中に別のボードへ切り替わっていたら、古い結果は捨てる。
+          if (get().viewingBoardDate === boardDate) set({ chips });
+        } catch {
+          set({ storageAvailable: false });
+        }
+      },
+      listBoardDates: async () => {
+        try { return await repo.getBoardDates(); }
+        catch { set({ storageAvailable: false }); return []; }
+      },
+      // 全データのエクスポートは表示中のボードに限らない。chips は表示中のボードだけなので、
+      // 全メモはここで読み直す。読めなかったことを空リストと区別できるよう null を返す。
+      listAllMemos: async () => {
+        try { return await repo.getMemos(); }
+        catch { set({ storageAvailable: false }); return null; }
+      },
       dismissSaveError: () => set((state) => ({ saveErrors: state.saveErrors.slice(1) })),
       addChips: async (incoming) => {
         if (memoImport) await awaitMemoImport();
-        const { settings } = get();
+        if (!writable()) return { added: 0, rejected: 0, readOnly: true };
+        const { settings, viewingBoardDate } = get();
         const chips = [...get().chips];
         const added: MemoItem[] = [];
         let rejected = 0;
@@ -146,7 +192,7 @@ export function createAppStore(repo: Repository = repository, persist = requestP
             chips[existing] = { ...chips[existing], highlighted: true };
             highlight(chips[existing].id);
           } else {
-            const chip = persisted({ ...item, normText });
+            const chip = persisted({ ...item, normText, boardDate: viewingBoardDate });
             if (quadrantLength([...chips, chip], chip.quadrant) > QUADRANT_TEXT_LIMIT) { rejected++; continue; }
             chips.push(chip); added.push(chip);
           }
@@ -157,6 +203,7 @@ export function createAppStore(repo: Repository = repository, persist = requestP
       },
       moveChip: async (id, quadrant) => {
         if (memoImport) await awaitMemoImport();
+        if (!writable()) return { ok: false, reason: 'read-only' };
         const current = get().chips.find((chip) => chip.id === id);
         if (!current) return { ok: false, reason: 'not-found' };
         if (current.quadrant === quadrant) return { ok: true };
@@ -169,6 +216,7 @@ export function createAppStore(repo: Repository = repository, persist = requestP
       },
       editChip: async (id, text) => {
         if (memoImport) await awaitMemoImport();
+        if (!writable()) return { ok: false, reason: 'read-only' };
         if (!normalize(text)) { await get().removeChip(id); return { ok: true }; }
         const current = get().chips.find((chip) => chip.id === id);
         if (!current) return { ok: false, reason: 'not-found' };
@@ -184,6 +232,7 @@ export function createAppStore(repo: Repository = repository, persist = requestP
       },
       removeChip: async (id) => {
         if (memoImport) await awaitMemoImport();
+        if (!writable()) return;
         set((state) => ({ chips: state.chips.filter((chip) => chip.id !== id) }));
         await save(() => repo.removeMemo(id), [id]);
       },
@@ -224,7 +273,10 @@ export function createAppStore(repo: Repository = repository, persist = requestP
           const data = await repo.applyImport(input);
           set((state) => ({ dictionaries: data.dictionaries, normalizedDicts: buildNormalizedDicts(data.dictionaries),
             ...(data.settings ? { settings: data.settings,
-              chips: [...state.chips, ...skipExistingMemos(data.memos, state.chips.map((chip) => chip.id))]
+              // 取り込んだメモのうち、表示中のボードの日付のものだけを画面へ載せる。
+              // 他の日付のメモは保存済みで、その日付のボードを開いたときに現れる。
+              chips: [...state.chips, ...skipExistingMemos(data.memos, state.chips.map((chip) => chip.id))
+                .filter((memo) => memo.boardDate === state.viewingBoardDate)]
                 .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)) } : {}),
           }));
         }, {

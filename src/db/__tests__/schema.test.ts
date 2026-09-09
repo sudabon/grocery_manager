@@ -26,7 +26,8 @@ it('versionchangeで接続を破棄し次回に開き直す', async () => {
   db.close(); (await second).close();
 });
 it('open失敗はキャッシュせず次回に開き直す', async () => {
-  const bumped = await openDB('quadmemo', 2, { upgrade() {} });
+  // アプリより新しい版数で開いておき、以降の接続を VersionError にする。
+  const bumped = await openDB('quadmemo', schema.QUADMEMO_DB_VERSION + 1, { upgrade() {} });
   bumped.close();
   await expect(schema.getQuadmemoDb()).rejects.toThrow();
   await deleteDB('quadmemo');

@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { commitText } from '../commitText';
 import { buildNormalizedDicts } from '../classify';
+import { todayBoardDate } from '../boardDate';
 import { useAppStore } from '../../store/useAppStore';
 import { defaultSettings } from '../../db/defaults';
 beforeEach(async () => {
@@ -28,6 +29,8 @@ it('0件は追加も通知もせず50件ちょうどは通知しない', async (
 });
 it('同一ミリ秒の50件はULIDが単調増加する', async () => {
   vi.spyOn(Date, 'now').mockReturnValue(2000000000000);
+  // 固定した時刻の日付を表示中のボードにする（当日以外へは書き込めない: useAppStore の D4 判定）。
+  useAppStore.setState({ viewingBoardDate: todayBoardDate() });
   await commitText(Array(50).fill('語').join(' '), vi.fn());
   const ids = useAppStore.getState().chips.map((chip) => chip.id);
   expect(ids).toHaveLength(50);

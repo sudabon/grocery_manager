@@ -1,3 +1,4 @@
+import { boardDateOf, todayBoardDate } from './boardDate';
 import { QUADRANT_ORDER, type QuadrantId } from './classify';
 import { QUADRANT_LABELS } from '../db/defaults';
 import { sanitizeEntries } from './dictEntries';
@@ -34,22 +35,29 @@ function settings(value: unknown): PortableSettings {
   return { key: 'app', partialMatch: s.partialMatch, allowDuplicates: s.allowDuplicates,
     showDictationHint: s.showDictationHint, autoCommitMs: clampAutoCommitMs(s.autoCommitMs) };
 }
+const boardDate = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
 function memos(value: unknown): MemoItem[] {
   if (!Array.isArray(value)) throw invalid();
   return value.map((item) => {
     const m = record(item);
     if (typeof m.id !== 'string' || !m.id || typeof m.rawText !== 'string' || typeof m.normText !== 'string' ||
       !quadrant(m.quadrant) || !(m.matchedEntry === null || typeof m.matchedEntry === 'string') ||
-      typeof m.autoClassified !== 'boolean' || !finite(m.createdAt) || !finite(m.updatedAt)) throw invalid();
-    return { id: m.id, rawText: m.rawText, normText: m.normText, quadrant: m.quadrant,
+      typeof m.autoClassified !== 'boolean' || !finite(m.createdAt) || !finite(m.updatedAt) ||
+      (m.boardDate !== undefined && !boardDate(m.boardDate))) throw invalid();
+    // 日付を持たない旧版のメモは作成時刻の JST 日付へ振り分ける（design.md - D6）。
+    return { id: m.id, boardDate: boardDate(m.boardDate) ? m.boardDate : boardDateOf(m.createdAt),
+      rawText: m.rawText, normText: m.normText, quadrant: m.quadrant,
       matchedEntry: m.matchedEntry, autoClassified: m.autoClassified, createdAt: m.createdAt, updatedAt: m.updatedAt };
   });
 }
 export function dictionaryExport(value: Dictionary[]) { return { version: 1, dictionaries: value.map(({ quadrant, entries, updatedAt }) => ({ quadrant, entries, updatedAt })) }; }
+/** メモの日付を含む版数。旧版（1）の入力も受け入れる（design.md - D6）。 */
+export const FULL_EXPORT_SCHEMA_VERSION = 2;
+const SUPPORTED_SCHEMA_VERSIONS = [1, FULL_EXPORT_SCHEMA_VERSION];
 export function fullExport(data: AppData, now = new Date()) {
-  return { app: 'quadmemo', schemaVersion: 1, exportedAt: now.toISOString(),
-    dictionaries: data.dictionaries.map(({ quadrant, entries, updatedAt }) => ({ quadrant, entries, updatedAt })), memos: data.memos.map(({ id, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt }) =>
-      ({ id, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt })),
+  return { app: 'quadmemo', schemaVersion: FULL_EXPORT_SCHEMA_VERSION, exportedAt: now.toISOString(),
+    dictionaries: data.dictionaries.map(({ quadrant, entries, updatedAt }) => ({ quadrant, entries, updatedAt })), memos: data.memos.map(({ id, boardDate, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt }) =>
+      ({ id, boardDate, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt })),
     settings: settings(data.settings) };
 }
 export function parseDictionaryImport(text: string): Dictionary[] {
@@ -67,7 +75,8 @@ export function parseFullImport(text: string): AppData {
   let parsed: unknown;
   try { parsed = JSON.parse(text); } catch { throw invalid(); }
   const value = record(parsed);
-  if (value.app !== 'quadmemo' || value.schemaVersion !== 1 || typeof value.exportedAt !== 'string' || !Number.isFinite(Date.parse(value.exportedAt))) throw invalid();
+  if (value.app !== 'quadmemo' || !SUPPORTED_SCHEMA_VERSIONS.includes(value.schemaVersion as number) ||
+    typeof value.exportedAt !== 'string' || !Number.isFinite(Date.parse(value.exportedAt))) throw invalid();
   return validateAppData(value);
 }
 export function skipExistingMemos(incoming: MemoItem[], existingIds: Iterable<string>): MemoItem[] {
@@ -80,6 +89,10 @@ export function skipExistingMemos(incoming: MemoItem[], existingIds: Iterable<st
 }
 // 'board' だけは復元できない参照用画像なので拡張子が異なる（board-image-share design - D2）。
 const exportExtension = { export: 'json', dictionaries: 'json', board: 'png' } as const;
-export function exportFileName(kind: keyof typeof exportExtension, date = new Date()): string {
-  return `quadmemo-${kind}-${date.toISOString().slice(0, 10)}.${exportExtension[kind]}`;
+/**
+ * ファイル名の日付は JST 固定にする（design.md - D6）。共有画像は生成日ではなく
+ * 対象ボードの日付を渡すため、引数は `YYYY-MM-DD` の文字列で受け取る。
+ */
+export function exportFileName(kind: keyof typeof exportExtension, date = todayBoardDate()): string {
+  return `quadmemo-${kind}-${date}.${exportExtension[kind]}`;
 }
