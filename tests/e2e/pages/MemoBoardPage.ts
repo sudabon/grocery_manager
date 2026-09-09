@@ -17,6 +17,7 @@ export class MemoBoardPage {
   /** 象限ごとのチップ本文。共有の前後で同一であることの比較に使う。 */
   async quadrantTexts() { return Promise.all([1, 2, 3, 4].map((id) => this.quadrantChips(id).allInnerTexts())); }
   quadrant(id: number) { return this.board.getByRole('region', { name: new RegExp(`^Q${id} `) }); }
+  remaining(id: number) { return this.quadrant(id).getByText(/^残り\d+文字$/); }
   quadrantChips(id: number) { return this.quadrant(id).getByRole('button', { name: /^メモ「/ }); }
   chip(text: string) { return this.board.getByRole('button', { name: `メモ「${text}」（未分類）`, exact: true }); }
   classifiedChip(text: string) { return this.board.getByRole('button', { name: `メモ「${text}」`, exact: true }); }

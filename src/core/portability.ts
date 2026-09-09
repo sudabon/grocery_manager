@@ -1,4 +1,5 @@
 import { QUADRANT_ORDER, type QuadrantId } from './classify';
+import { QUADRANT_LABELS } from '../db/defaults';
 import { sanitizeEntries } from './dictEntries';
 import { clampAutoCommitMs } from './settings';
 import type { PortableSettings, Dictionary, MemoItem } from '../db/schema';
@@ -18,11 +19,11 @@ function dictionaries(value: unknown): Dictionary[] {
   const seen = new Set<QuadrantId>();
   const result = value.map((item) => {
     const d = record(item);
-    if (!quadrant(d.quadrant) || seen.has(d.quadrant) || typeof d.label !== 'string' ||
+    if (!quadrant(d.quadrant) || seen.has(d.quadrant) || (d.label !== undefined && typeof d.label !== 'string') ||
       !Array.isArray(d.entries) || !d.entries.every((entry) => typeof entry === 'string') ||
       (d.updatedAt !== undefined && !finite(d.updatedAt))) throw invalid();
     seen.add(d.quadrant);
-    return { quadrant: d.quadrant, label: d.label.trim(), entries: sanitizeEntries(d.entries.join('\n')), updatedAt: d.updatedAt ?? Date.now() } as Dictionary;
+    return { quadrant: d.quadrant, label: QUADRANT_LABELS[d.quadrant], entries: sanitizeEntries(d.entries.join('\n')), updatedAt: d.updatedAt ?? Date.now() } as Dictionary;
   });
   return QUADRANT_ORDER.map((q) => result.find((d) => d.quadrant === q)!);
 }
@@ -44,10 +45,10 @@ function memos(value: unknown): MemoItem[] {
       matchedEntry: m.matchedEntry, autoClassified: m.autoClassified, createdAt: m.createdAt, updatedAt: m.updatedAt };
   });
 }
-export function dictionaryExport(value: Dictionary[]) { return { version: 1, dictionaries: value }; }
+export function dictionaryExport(value: Dictionary[]) { return { version: 1, dictionaries: value.map(({ quadrant, entries, updatedAt }) => ({ quadrant, entries, updatedAt })) }; }
 export function fullExport(data: AppData, now = new Date()) {
   return { app: 'quadmemo', schemaVersion: 1, exportedAt: now.toISOString(),
-    dictionaries: data.dictionaries, memos: data.memos.map(({ id, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt }) =>
+    dictionaries: data.dictionaries.map(({ quadrant, entries, updatedAt }) => ({ quadrant, entries, updatedAt })), memos: data.memos.map(({ id, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt }) =>
       ({ id, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt })),
     settings: settings(data.settings) };
 }

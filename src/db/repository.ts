@@ -1,5 +1,6 @@
 import type { IDBPDatabase } from 'idb';
 import { validateAppData, skipExistingMemos, type AppData } from '../core/portability';
+import { assertQuadrantLimit } from '../core/quadrantLength';
 import type { QuadrantId } from '../core/classify';
 import { defaultSettings, seedDictionaries } from './defaults';
 import { getQuadmemoDb, type AppSettings, type Dictionary, type MemoItem, type QuadmemoDb } from './schema';
@@ -35,8 +36,14 @@ export function createRepository(connect: () => Promise<IDBPDatabase<QuadmemoDb>
       const completion = tx.done;
       void completion.catch(() => {});
       try {
-        for (const dictionary of data.dictionaries) await tx.objectStore('dictionaries').put(dictionary);
         let added: MemoItem[] = [];
+        if (full) {
+          // 統合結果の検証と書き込みを同じトランザクションに閉じ、別タブからの更新とも競合させない。
+          const existing = await tx.objectStore('memos').getAll();
+          added = skipExistingMemos(data.memos, existing.map((memo) => memo.id));
+          assertQuadrantLimit([...existing, ...added]);
+        }
+        for (const dictionary of data.dictionaries) await tx.objectStore('dictionaries').put(dictionary);
         if (full) {
           const current = await tx.objectStore('settings').get('app');
           // 端末固有の案内記録はインポートで持ち越す（型分割により merge が必須）。
@@ -45,7 +52,6 @@ export function createRepository(connect: () => Promise<IDBPDatabase<QuadmemoDb>
           const merged: AppSettings = { ...data.settings, installHintDismissed };
           await tx.objectStore('settings').put(merged);
           const store = tx.objectStore('memos');
-          added = skipExistingMemos(data.memos, await store.getAllKeys());
           for (const memo of added) await store.add(memo);
           await completion;
           return { ...data, settings: merged, memos: added };

@@ -1,10 +1,6 @@
 import { test, expect, fixtureFile, readDownload } from './fixtures/dictionaries';
 const tags = (id: string) => ({ tag: ['@add-quadmemo-dictionaries', `@${id}`] });
 
-test('ラベルを変更して保存するとメモ画面に反映される', tags('TP-001'), async ({ dictionaries, memo }) => {
-  await dictionaries.open(); await dictionaries.label.fill('企画'); await expect(dictionaries.dirty).toBeVisible(); await dictionaries.save();
-  await dictionaries.back(); await expect(memo.quadrant(1)).toHaveAccessibleName(/^Q1 企画/);
-});
 test('語を追加して保存すると次のコミットから分類される', tags('TP-002'), async ({ dictionaries, memo }) => {
   await dictionaries.open(); await dictionaries.entries.fill('orange'); await dictionaries.save(); await dictionaries.back();
   await memo.start(); await memo.add('orange'); await expect(memo.quadrantChips(1)).toHaveText(['orange']);
@@ -35,10 +31,11 @@ test.describe('既存メモを持つ状態', () => {
     await memo.waitForSave(); await memo.reload(); await expect(memo.quadrantChips(1)).toHaveText(['apple']);
   });
   test('2段階の確認で全削除し再読込してもラベルと設定を保持する', tags('TP-017'), async ({ settingsPage, dictionaries, memo }) => {
-    await dictionaries.open(); await dictionaries.label.fill('企画'); await dictionaries.save();
+    await dictionaries.open(); await dictionaries.entries.fill('orange'); await dictionaries.save();
     await settingsPage.open(); await settingsPage.partial.check(); await settingsPage.saved();
     await settingsPage.clear(); await settingsPage.reload(); await expect(settingsPage.partial).toBeChecked();
-    await settingsPage.back(); await expect(memo.chips).toHaveCount(0); await expect(memo.quadrant(1)).toHaveAccessibleName(/^Q1 企画/);
+    await settingsPage.back(); await expect(memo.chips).toHaveCount(0); await expect(memo.quadrant(1)).toHaveAccessibleName(/^Q1 それ以外/);
+    await dictionaries.open(); await expect(dictionaries.entries).toHaveValue('orange');
   });
   test('全削除の1段階目と2段階目の中止ではメモが残る', tags('TP-018'), async ({ settingsPage, memo }) => {
     await settingsPage.open(); await settingsPage.deleteButton.click(); await settingsPage.cancel.click();
@@ -47,15 +44,15 @@ test.describe('既存メモを持つ状態', () => {
     await settingsPage.back(); await memo.reload(); await expect(memo.chips).toHaveCount(3);
   });
   test('全データを出力して全削除後にインポートすると復元できる', tags('TP-024'), async ({ settingsPage, dictionaries, memo }) => {
-    await dictionaries.open(); await dictionaries.label.fill('バックアップ'); await dictionaries.save();
+    await dictionaries.open(); await dictionaries.entries.fill('orange'); await dictionaries.save();
     await settingsPage.open(); await settingsPage.partial.check(); await settingsPage.saved(); await settingsPage.setWait(700);
     const download = await settingsPage.export(); const before = await readDownload(download); const path = (await download.path())!;
     expect(before).toMatchObject({ app: 'quadmemo', schemaVersion: 1, exportedAt: expect.any(String) });
     await settingsPage.clear(); await settingsPage.partial.uncheck(); await settingsPage.saved();
-    await dictionaries.open(); await dictionaries.label.fill('変更後'); await dictionaries.save();
+    await dictionaries.open(); await dictionaries.entries.fill('changed'); await dictionaries.save();
     await settingsPage.open(); await settingsPage.import(path); await settingsPage.acceptImport(); await settingsPage.reload();
     expect(await readDownload(await settingsPage.export())).toEqual({ ...before, exportedAt: expect.any(String) });
-    await settingsPage.back(); await expect(memo.chips).toHaveCount(3); await expect(memo.quadrant(1)).toHaveAccessibleName(/^Q1 バックアップ/);
+    await settingsPage.back(); await expect(memo.chips).toHaveCount(3); await expect(memo.quadrant(1)).toHaveAccessibleName(/^Q1 それ以外/);
   });
   test('版数不一致の全データを拒否して全ストアを保持する', tags('TP-025'), async ({ settingsPage }) => {
     await settingsPage.open(); const before = await readDownload(await settingsPage.export());
@@ -81,7 +78,7 @@ test('辞書編集で分割単位と重複除去のヘルプを読める', tags(
 test.describe('空の辞書', () => {
   test.use({ classificationSeed: 'seed:dict-all-empty' });
   test('辞書全空のメモ画面から辞書編集へ移動できる', tags('TP-009'), async ({ dictionaries }) => {
-    await expect(dictionaries.prompt).toBeVisible(); await dictionaries.prompt.click(); await expect(dictionaries.label).toBeVisible();
+    await expect(dictionaries.prompt).toBeVisible(); await dictionaries.prompt.click(); await expect(dictionaries.entries).toBeVisible();
   });
   test('1語保存すると辞書設定の導線が消える', tags('TP-010'), async ({ dictionaries }) => {
     await dictionaries.prompt.click(); await dictionaries.entries.fill('orange'); await dictionaries.save(); await dictionaries.back(); await expect(dictionaries.prompt).toHaveCount(0);
@@ -123,10 +120,11 @@ test('プライバシー方針と定期バックアップ推奨を読める', ta
   await settingsPage.open(); await expect(settingsPage.info).toContainText('外部へのネットワーク送信は行いません');
   await expect(settingsPage.backup).toContainText('定期的なバックアップ');
 });
-test('辞書出力は版数と4象限のラベル単語を含む', tags('TP-021'), async ({ dictionaries }) => {
+test('辞書出力は版数と4象限の単語を含みラベルを含まない', tags('TP-021'), async ({ dictionaries }) => {
   await dictionaries.open(); const result = await readDownload(await dictionaries.export());
   expect(result.version).toBe(1); expect(result.dictionaries.map((d: { quadrant: string }) => d.quadrant)).toEqual(['q1','q2','q3','q4']);
-  expect(result.dictionaries[0]).toMatchObject({ label: '仕事', entries: ['apple', '会議', '猫'] });
+  expect(result.dictionaries[0]).toMatchObject({ entries: ['apple', '会議', '猫'] });
+  for (const dict of result.dictionaries) expect(dict).not.toHaveProperty('label');
 });
 test('壊れた辞書JSONを拒否して既存内容を保持する', tags('TP-022'), async ({ dictionaries }) => {
   await dictionaries.open(); const before = await readDownload(await dictionaries.export());
@@ -135,7 +133,7 @@ test('壊れた辞書JSONを拒否して既存内容を保持する', tags('TP-0
 });
 test('正しい辞書をインポートすると4象限が置き換わり分類に効く', tags('TP-023'), async ({ dictionaries, memo }) => {
   await dictionaries.open(); await dictionaries.import(fixtureFile('dictionaries.json')); await expect(dictionaries.toast).toContainText('辞書をインポートしました');
-  for (const [index, label] of ['企画', '暮らし', '食品', '保留'].entries()) { await dictionaries.tab(index + 1).click(); await expect(dictionaries.label).toHaveValue(label); }
+  for (const [index, text] of ['orange', 'ぱん', '牛乳', ''].entries()) { await dictionaries.tab(index + 1).click(); await expect(dictionaries.entries).toHaveValue(text); }
   await dictionaries.back(); await memo.start(); await memo.add('orange'); await expect(memo.quadrantChips(1)).toHaveText(['orange']);
 });
 test('共有非対応では日付付きJSONをダウンロードできる', tags('TP-028'), async ({ settingsPage }) => {

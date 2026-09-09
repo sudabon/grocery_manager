@@ -8,13 +8,13 @@ import type { MemoItem } from '../../../src/db/schema';
 export const fixtureNames = [
   'seed:dict-all-empty', 'seed:fresh-storage', 'seed:dict-basic', 'seed:dict-overlap-partial', 'seed:dict-normalize-tie',
   'seed:settings-partial-match', 'seed:settings-no-duplicates', 'seed:memos-across-quadrants',
-  'seed:dict-custom-labels', 'env:idb-write-failure', 'env:idb-blocked',
+  'seed:quadrant-at-limit', 'seed:quadrant-near-limit', 'seed:dict-custom-labels', 'env:idb-write-failure', 'env:idb-blocked',
 ] as const;
 export type ClassificationFixture = typeof fixtureNames[number];
 function memo(id: string, rawText: string, quadrant: MemoItem['quadrant']): MemoItem {
   return { id, rawText, normText: rawText, quadrant, matchedEntry: rawText, autoClassified: true, createdAt: 1, updatedAt: 1 };
 }
-export function seedFor(name: ClassificationFixture): DatabaseSeed {
+function seedFor(name: ClassificationFixture): DatabaseSeed {
   const dictionaries = seedDictionaries(1);
   dictionaries[0].entries = ['apple', '会議', '猫'];
   dictionaries[1].entries = ['ぱん'];
@@ -39,6 +39,9 @@ export function seedFor(name: ClassificationFixture): DatabaseSeed {
     seed.settings.partialMatch = true;
     seed.settings.autoCommitMs = 3000;
     seed.settings.showDictationHint = false;
+  }
+  if (name === 'seed:quadrant-at-limit' || name === 'seed:quadrant-near-limit') {
+    seed.memos = [memo('capacity-memo', 'a'.repeat(name === 'seed:quadrant-at-limit' ? 100 : 95), 'q1'), memo('movable-memo', 'ぱん', 'q2')];
   }
   return seed;
 }

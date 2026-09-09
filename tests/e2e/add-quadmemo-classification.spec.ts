@@ -79,21 +79,21 @@ test.describe('保存済みメモの操作', () => {
 });
 test.describe('保存済みの独自辞書', () => {
   test.use({ classificationSeed: 'seed:dict-custom-labels' });
-  test('保存済みラベルと部分一致設定をロードして対応象限へ分類する', tags('TP-017'), async ({ memo }) => {
-    for (const [id, label] of [[1, '企画'], [2, '暮らし'], [3, '食品'], [4, '保留']] as const) await expect(memo.quadrant(id)).toHaveAccessibleName(`Q${id} ${label}`);
+  test('固定ラベルを表示し保存済み部分一致設定で対応象限へ分類する', tags('TP-017'), async ({ memo }) => {
+    for (const [id, label] of [[1, 'それ以外'], [2, '野菜'], [3, '肉類・乳製品'], [4, 'ドラッグストア']] as const) await expect(memo.quadrant(id)).toHaveAccessibleName(`Q${id} ${label}`);
     await memo.start(); await memo.add('apples'); await expect(memo.quadrantChips(1)).toHaveText(['apples']);
-    await memo.openClassifiedChip('apples'); await expect(memo.moveButton(2)).toHaveText('Q2 暮らしへ移動');
+    await memo.openClassifiedChip('apples'); await expect(memo.moveButton(2)).toHaveText('Q2 野菜へ移動');
   });
-  test('リロードしても独自ラベルと設定が初期値に戻らない', tags('TP-019'), async ({ memo }) => {
-    await memo.reload(); await expect(memo.quadrant(1)).toHaveAccessibleName('Q1 企画');
+  test('リロードしても固定ラベルを表示し保存済み設定と単語リストを保持する', tags('TP-019'), async ({ memo }) => {
+    await memo.reload(); await expect(memo.quadrant(1)).toHaveAccessibleName('Q1 それ以外');
     await memo.start(); await memo.add('apples'); await expect(memo.quadrantChips(1)).toHaveText(['apples']);
   });
 });
 test.describe('初回起動', () => {
   test.use({ classificationSeed: 'seed:fresh-storage' });
   test('保存データなしで起動すると初期ラベルが見えシード辞書で分類される', tags('TP-018'), async ({ memo }) => {
-    for (const [id, label] of [[1, '仕事'], [2, '家庭'], [3, '買い物'], [4, 'その他']] as const) await expect(memo.quadrant(id)).toHaveAccessibleName(`Q${id} ${label}`);
-    await memo.start(); await memo.add('会議 牛乳'); await expect(memo.quadrantChips(1)).toHaveText(['会議']); await expect(memo.quadrantChips(3)).toHaveText(['牛乳']);
+    for (const [id, label] of [[1, 'それ以外'], [2, '野菜'], [3, '肉類・乳製品'], [4, 'ドラッグストア']] as const) await expect(memo.quadrant(id)).toHaveAccessibleName(`Q${id} ${label}`);
+    await memo.start(); await memo.add('にんじん 牛乳'); await expect(memo.quadrantChips(2)).toHaveText(['にんじん']); await expect(memo.quadrantChips(3)).toHaveText(['牛乳']);
   });
 });
 test('同一象限へ順に追加してリロードしても作成順が変わらない', tags('TP-020'), async ({ memo }) => {
@@ -124,7 +124,7 @@ test('追加・移動・編集・削除と画面遷移で配信元以外への�
   expect(externalRequests).toEqual([]);
 });
 test('50件を一括コミットしてリロードすると欠けや重複なく復元される', tags('TP-024'), async ({ memo }) => {
-  const tokens = Array.from({ length: 50 }, (_, i) => `token${i}`);
+  const tokens = Array.from('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWX');
   await memo.start(); await memo.add(tokens.join(' ')); await expect(memo.chips).toHaveCount(50);
   await memo.waitForSave(); await memo.reload(); await expect(memo.quadrantChips(4)).toHaveText(tokens);
 });

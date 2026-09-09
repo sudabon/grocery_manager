@@ -32,5 +32,6 @@ export class SettingsPage {
   async clear() { await this.deleteButton.click(); await this.next.click(); await this.deleteConfirm.click(); await expect(this.dialog).toHaveCount(0); await this.saved(); }
   async export() { const download = this.page.waitForEvent('download'); await this.exportButton.click(); return download; }
   async import(path: string) { await this.importInput.setInputFiles(path); }
+  async importContents(text: string) { await this.importInput.setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(text) }); }
   async acceptImport() { await this.importConfirm.click(); await expect(this.dialog).toHaveCount(0); await this.saved(); }
 }

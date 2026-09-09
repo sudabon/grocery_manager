@@ -1,5 +1,6 @@
 import type { QuadrantId } from './classify';
-import type { Dictionary, MemoItem } from '../db/schema';
+import { QUADRANT_LABELS } from '../db/defaults';
+import type { MemoItem } from '../db/schema';
 
 /** 画面のボードと同じ視覚配置: 左上 Q2・右上 Q1・左下 Q3・右下 Q4（design.md - D1）。 */
 export const BOARD_IMAGE_ORDER: QuadrantId[] = ['q2', 'q1', 'q3', 'q4'];
@@ -10,18 +11,17 @@ export interface BoardImageCell { quadrant: QuadrantId; label: string; texts: st
  * 「どの象限にどのラベルとどの本文が載るか」はこの純粋関数で担保する（design.md - D5）。
  */
 export function boardImageLayout(
-  dictionaries: readonly Pick<Dictionary, 'quadrant' | 'label'>[],
   chips: readonly Pick<MemoItem, 'quadrant' | 'rawText'>[],
 ): BoardImageCell[] {
   return BOARD_IMAGE_ORDER.map((quadrant) => ({
     quadrant,
-    label: dictionaries.find((dict) => dict.quadrant === quadrant)?.label ?? '',
+    label: QUADRANT_LABELS[quadrant],
     // chips は追加順の配列なので、filter がそのまま画面の並び順になる。
     texts: chips.filter((chip) => chip.quadrant === quadrant).map((chip) => chip.rawText),
   }));
 }
 
-// 画面と同じ配色。外部画像もウェブフォントも読み込まないので、キャンバスは汚染されない（design.md - D1）。
+// 画面と同じ配色。クロスオリジンの画像を描かないのでキャンバスは汚染されない（design.md - Risks/Trade-offs）。外部フォントも使わない（design.md - D1）。
 const FONT_STACK = '-apple-system, BlinkMacSystemFont, "Helvetica Neue", "Noto Sans JP", sans-serif';
 const COLORS = { grid: '#bfc8bf', cell: ['#f8f3e9', '#eff3ed', '#f2efea', '#eef1f2'], text: '#283c35', muted: '#637267', chip: '#fffdf8', chipBorder: '#728379' };
 const WIDTH = 1080, GAP = 2, PADDING = 32;
@@ -45,8 +45,13 @@ function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, width:
   else ctx.rect(x, y, width, height);
   ctx.fill(); ctx.stroke();
 }
+// 描画不能なキャンバスに対し、ブラウザは例外ではなく "data:," を返すことがある（上限はブラウザ・端末により異なる）。
+// 検証しないと 0 バイトの PNG が「成功」として共有へ渡るため、プレフィクスと、本文が空でないことを見る。
+// 描かれた中身が白紙かどうかまでは判定していない。
+const PNG_DATA_URL_PREFIX = 'data:image/png;base64,';
 function dataUrlToFile(dataUrl: string, name: string): File {
-  const binary = atob(dataUrl.slice(dataUrl.indexOf(',') + 1));
+  if (!dataUrl.startsWith(PNG_DATA_URL_PREFIX) || dataUrl.length === PNG_DATA_URL_PREFIX.length) throw new Error('画像を書き出せませんでした。');
+  const binary = atob(dataUrl.slice(PNG_DATA_URL_PREFIX.length));
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
   return new File([bytes], name, { type: 'image/png' });
@@ -79,15 +84,18 @@ export function boardImageFile(layout: BoardImageCell[], name: string): File {
   cells.forEach((cell, index) => {
     const x = index % 2 === 0 ? 0 : columnWidth + GAP;
     const y = index < 2 ? 0 : rows[0] + GAP;
+    const rowHeight = rows[index < 2 ? 0 : 1];
     ctx.fillStyle = COLORS.cell[index];
-    ctx.fillRect(x, y, columnWidth, rows[index < 2 ? 0 : 1]);
+    ctx.fillRect(x, y, columnWidth, rowHeight);
     ctx.fillStyle = COLORS.muted;
     ctx.font = `${HEADING_SIZE - 8}px ${FONT_STACK}`;
     const numberWidth = ctx.measureText(cell.quadrant.toUpperCase()).width;
     ctx.fillText(cell.quadrant.toUpperCase(), x + PADDING, y + PADDING + 8);
     ctx.fillStyle = COLORS.text;
     ctx.font = `600 ${HEADING_SIZE}px ${FONT_STACK}`;
-    ctx.fillText(cell.label, x + PADDING + numberWidth + 12, y + PADDING);
+    // 固定ラベルは通常幅に収まる。将来の文言変更に備えて maxWidth は残す。
+    const labelLeft = x + PADDING + numberWidth + 12;
+    ctx.fillText(cell.label, labelLeft, y + PADDING, x + columnWidth - PADDING - labelLeft);
     ctx.font = `${CHIP_SIZE}px ${FONT_STACK}`;
     let top = y + PADDING + HEADING_HEIGHT;
     for (const lines of cell.chips) {

@@ -1,12 +1,12 @@
 import { test, expect } from './fixtures/memo-board';
 
 test('初期表示で4象限が等分割されラベルが見えチップは0件', { tag: ['@add-quadmemo-quadrant-ui', '@TP-001'] }, async ({ memo }) => {
-  for (const [id, label] of [[1, '仕事'], [2, '家庭'], [3, '買い物'], [4, 'その他']] as const) await expect(memo.quadrant(id)).toContainText(label);
+  for (const [id, label] of [[1, 'それ以外'], [2, '野菜'], [3, '肉類・乳製品'], [4, 'ドラッグストア']] as const) await expect(memo.quadrant(id)).toContainText(label);
   await expect(memo.chips).toHaveCount(0); await memo.expectEqualQuadrants();
 });
 test('あふれた象限だけをスクロールし末尾チップへ到達できる', { tag: ['@add-quadmemo-quadrant-ui', '@TP-002'] }, async ({ memo }) => {
-  await memo.start(); for (let i = 0; i < 4; i++) await memo.add(Array(50).fill('牛乳').join(' '));
-  await expect(memo.chips).toHaveCount(200); await memo.closeInput.click(); await memo.expectIndependentScroll();
+  await memo.start(); await memo.add(Array(50).fill('卵').join(' '));
+  await expect(memo.chips).toHaveCount(50); await memo.closeInput.click(); await memo.expectIndependentScroll();
 });
 test('マイクのタップで入力バーが開き入力欄にフォーカスする', { tag: ['@add-quadmemo-quadrant-ui', '@TP-003'] }, async ({ memo }) => {
   await memo.start(); await expect(memo.input).toBeVisible(); await expect(memo.confirm).toBeVisible();
@@ -50,8 +50,8 @@ test('記号のみのコミットはチップも通知も出さない', { tag: [
   await memo.start(); await memo.add('！？、。★🎤'); await expect(memo.input).toHaveValue(''); await expect(memo.chips).toHaveCount(0); await expect(memo.toast).toBeEmpty();
 });
 test('51語のコミットは先頭50件のみ登録し通知する', { tag: ['@add-quadmemo-quadrant-ui', '@TP-016'] }, async ({ memo }) => {
-  await memo.start(); await memo.add([...Array(50).fill('牛乳'), '卵'].join(' '));
-  await expect(memo.chips).toHaveCount(50); await expect(memo.chip('卵')).toHaveCount(0); await expect(memo.toast).toContainText('先頭50件のみ登録しました');
+  await memo.start(); await memo.add([...Array(50).fill('卵'), '牛乳'].join(' '));
+  await expect(memo.chips).toHaveCount(50); await expect(memo.chip('牛乳')).toHaveCount(0); await expect(memo.toast).toContainText('一部のみ登録しました');
 });
 test('チップ操作では現在の象限への移動を選べない', { tag: ['@add-quadmemo-quadrant-ui', '@TP-017'] }, async ({ memo }) => {
   await memo.start(); await memo.add('牛乳'); await memo.openChip('牛乳'); await expect(memo.moveButton(4)).toBeDisabled();
