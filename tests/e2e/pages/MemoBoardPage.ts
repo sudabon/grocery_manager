@@ -11,6 +11,11 @@ export class MemoBoardPage {
   get sheet() { return this.page.getByRole('dialog', { name: 'メモの操作' }); }
   get editInput() { return this.sheet.getByRole('textbox', { name: 'メモの編集' }); }
   get toast() { return this.page.getByRole('status'); }
+  get shareImageButton() { return this.page.getByRole('button', { name: '画像で共有', exact: true }); }
+  async shareImage() { await this.shareImageButton.click(); }
+  async downloadImage() { const download = this.page.waitForEvent('download'); await this.shareImageButton.click(); return download; }
+  /** 象限ごとのチップ本文。共有の前後で同一であることの比較に使う。 */
+  async quadrantTexts() { return Promise.all([1, 2, 3, 4].map((id) => this.quadrantChips(id).allInnerTexts())); }
   quadrant(id: number) { return this.board.getByRole('region', { name: new RegExp(`^Q${id} `) }); }
   quadrantChips(id: number) { return this.quadrant(id).getByRole('button', { name: /^メモ「/ }); }
   chip(text: string) { return this.board.getByRole('button', { name: `メモ「${text}」（未分類）`, exact: true }); }

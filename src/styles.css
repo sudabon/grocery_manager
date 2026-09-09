@@ -23,6 +23,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, section:focus-visibl
 .app-header a { width: fit-content; font-size: .875rem; padding-block: 12px; text-decoration: none; }
 .app-header a:last-child { justify-self: end; }
 .memo-page { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-bottom: calc(168px + env(safe-area-inset-bottom)); }
+.board-actions { flex: none; display: flex; justify-content: flex-end; padding: 6px max(12px, env(safe-area-inset-right)) 6px max(12px, env(safe-area-inset-left)); }
+.board-share-button { min-height: 40px; padding: 6px 14px; font-size: .8125rem; border: 1px solid #839084; border-radius: 10px; background: #fffdf8; }
 .quadrant-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); flex: 1; min-width: 0; min-height: 0; gap: 1px; background: #bfc8bf; border-bottom: 1px solid #bfc8bf; }
 .quadrant { min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; padding: 18px; background: #f6f5f0; scrollbar-width: thin; }
 .q1 { background: #eff3ed; } .q2 { background: #f8f3e9; } .q3 { background: #f2efea; } .q4 { background: #eef1f2; }

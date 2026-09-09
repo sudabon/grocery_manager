@@ -1,5 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// ビルド成果物とオフラインを前提にする spec。pwa プロジェクトだけが実行する。
+const pwaSpecs = ['**/add-quadmemo-pwa-offline.spec.ts', '**/add-quadmemo-board-image-share-offline.spec.ts'];
+
 export default defineConfig({
   testDir: './tests/e2e',
   webServer: [
@@ -16,9 +19,9 @@ export default defineConfig({
     }]),
   ],
   projects: [
-    { name: 'chromium', testIgnore: '**/add-quadmemo-pwa-offline.spec.ts', use: { ...devices['Desktop Chrome'] } },
-    { name: 'mobile-safari', testIgnore: '**/add-quadmemo-pwa-offline.spec.ts', use: { ...devices['iPhone 13'] } },
-    { name: 'pwa', testMatch: '**/add-quadmemo-pwa-offline.spec.ts', use: {
+    { name: 'chromium', testIgnore: pwaSpecs, use: { ...devices['Desktop Chrome'] } },
+    { name: 'mobile-safari', testIgnore: pwaSpecs, use: { ...devices['iPhone 13'] } },
+    { name: 'pwa', testMatch: pwaSpecs, use: {
       ...devices['iPhone 13'], browserName: 'chromium',
       baseURL: process.env.E2E_PWA_BASE_URL || 'http://localhost:3001', serviceWorkers: 'allow',
     } },

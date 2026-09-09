@@ -14,7 +14,7 @@ export type ClassificationFixture = typeof fixtureNames[number];
 function memo(id: string, rawText: string, quadrant: MemoItem['quadrant']): MemoItem {
   return { id, rawText, normText: rawText, quadrant, matchedEntry: rawText, autoClassified: true, createdAt: 1, updatedAt: 1 };
 }
-function seedFor(name: ClassificationFixture): DatabaseSeed {
+export function seedFor(name: ClassificationFixture): DatabaseSeed {
   const dictionaries = seedDictionaries(1);
   dictionaries[0].entries = ['apple', '会議', '猫'];
   dictionaries[1].entries = ['ぱん'];

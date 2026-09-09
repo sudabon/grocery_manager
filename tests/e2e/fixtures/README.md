@@ -62,6 +62,23 @@ fixture は各テストの前にべき等に状態を作り直し、テスト間
 | `files/unsupported.json` | schemaVersion 99 の全データを拒否 |
 | `files/collision.json` | 既存 apple と同じ ID で本文・正規化本文が「上書き禁止」のメモと、新しい orange の ID を含む。既存 apple を上書きせず衝突をスキップし新規だけ追加 |
 | `files/all-data.json` | 正常な全データ。上書き確認の中止、復元に使用 |
+
+## ボード画像共有（add-quadmemo-board-image-share）
+
+`board-image-share.ts` は `memo-board.ts` を拡張し、`boardSeed` で状態、`shareMode` で共有環境を選ぶ。
+シードは `addInitScript` の upgrade で 1 回しか走らないため、`memo-board.ts` の投入 fixture を差し替える形で選択する。
+オフライン観点は `board-image-share-pwa.ts`（`pwa.ts` に共有スタブを重ねたもの）で `pwa` プロジェクトから実行する。
+
+| fixture 名 | 作られる状態 | 使用する TP-ID |
+|---|---|---|
+| `env:web-share-abort` | `navigator.share` が受け渡しを記録したあと `AbortError` で拒否する（利用者による中止） | TP-005 |
+| `env:web-share-failure` | `navigator.share` が受け渡しを記録したあと AbortError 以外のエラーで失敗する | TP-007 |
+| `seed:empty-board`（再利用） | 初期ラベル・空エントリの4辞書、既定設定、メモ0件（`boardSeed` の既定値） | TP-001, TP-002 |
+| `seed:memos-across-quadrants`（再利用） | Q1 apple / Q2 ぱん / Q3 牛乳 | TP-003〜TP-007 |
+| `env:web-share-stub`（再利用） | share / canShare をスタブする。PNG は本文を読まず `name` と `type` を記録する（`shareMode` の既定値） | TP-002, TP-003, TP-005, TP-006, TP-008 |
+| `env:no-web-share`（再利用） | navigator.share / canShare を無効化しダウンロードへ固定 | TP-004 |
+| `env:built-app-offline`（再利用） | 下表の PWA fixture。共有スタブを重ねて切断状態から実行する | TP-008 |
+
 ## PWA fixtures
 
 `pwa.ts` の fixture 直接方式。`pwa` プロジェクト（iPhone 13 の表示・タッチ条件 / Chromium）は開発サーバーではなく

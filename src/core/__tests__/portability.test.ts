@@ -39,6 +39,7 @@ it('日付を含むファイル名', () => {
   const date = new Date('2026-09-08T10:00:00Z');
   expect(exportFileName('export', date)).toBe('quadmemo-export-2026-09-08.json');
   expect(exportFileName('dictionaries', date)).toBe('quadmemo-dictionaries-2026-09-08.json');
+  expect(exportFileName('board', date)).toBe('quadmemo-board-2026-09-08.png');
 });
 it('可搬設定だけを出力し、往復できる', () => {
   const exported = fullExport(data());
