@@ -58,5 +58,5 @@
 - [x] E6 TP-004: アプリ内ルートでリロードしても 200・アプリシェルが返るテストを実装（tag: `@setup-quadmemo-hosting`, `@TP-004`）
 - [x] E7 TP-005: アプリシェルのレスポンスの `Cache-Control` に `no-cache` が含まれるテストを実装（tag: `@setup-quadmemo-hosting`, `@TP-005`）
 - [x] E8 TP-006: アプリシェルのレスポンスに `X-Content-Type-Options: nosniff` と `Strict-Transport-Security` が付与されているテストを実装（tag: `@setup-quadmemo-hosting`, `@TP-006`）
-- [ ] E9 `E2E_BASE_URL=https://<配信サブドメイン> npx playwright test --grep @setup-quadmemo-hosting` を両プロジェクト（chromium / mobile-safari）で実行し、全件パスすることを確認
+- [x] E9 `E2E_BASE_URL=https://<配信サブドメイン> npx playwright test --grep @setup-quadmemo-hosting` を両プロジェクト（chromium / mobile-safari）で実行し、全件パスすることを確認
 - [x] E10 `bash scripts/check-test-plan.sh --change setup-quadmemo-hosting` を実行し、`@setup-quadmemo-hosting` タグ付きテストの存在チェックが通ることを確認（引数なしの差分モードは `openspec/` を git 管理下に入れるまで exit 2 になる）
