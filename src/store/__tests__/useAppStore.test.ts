@@ -18,6 +18,23 @@ beforeEach(() => {
   store = createAppStore(repo, async () => 'granted');
 });
 afterEach(() => vi.useRealTimers());
+it('案内の記録は保存し、失敗しても通知しない', async () => {
+  await store.getState().dismissInstallHint();
+  expect(repo.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ installHintDismissed: true }));
+  expect(store.getState().settings.installHintDismissed).toBe(true);
+  expect(store.getState().saveErrors).toEqual([]);
+  store = createAppStore(repo, async () => 'granted');
+  const error = new Error('quota');
+  vi.mocked(repo.saveSettings).mockRejectedValueOnce(error);
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  try {
+    await store.getState().dismissInstallHint();
+    expect(store.getState().settings.installHintDismissed).not.toBe(true);
+    expect(store.getState().saveErrors).toEqual([]);
+    expect(store.getState().pendingWrites).toBe(0);
+    expect(warn).toHaveBeenCalledExactlyOnceWith('[settings] install hint dismissal not persisted', error);
+  } finally { warn.mockRestore(); }
+});
 it('追加順を保ち同一単語も別チップにする', async () => {
   await store.getState().addChips([chip('a'), chip('b')]);
   expect(store.getState().chips.map((item) => item.id)).toEqual(['a', 'b']);

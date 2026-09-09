@@ -21,17 +21,12 @@ export class PwaPage {
     await this.page.goto('/');
     await expect(this.memo.board).toBeVisible();
     await expect(this.offlineReady).toBeVisible();
-    await this.page.evaluate(async () => {
-      if (!navigator.serviceWorker.controller) {
-        await new Promise<void>((resolve) => navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true }));
-      }
-    });
   }
   async closeHint() {
     await this.installHint.getByRole('button', { name: 'ホーム画面追加の案内を閉じる' }).click();
     await this.memo.waitForSave();
   }
-  async manifest() {
+  async manifest(): Promise<{ icons: { src: string; sizes: string; type: string; purpose?: string }[] } & Record<string, unknown>> {
     const href = await this.page.evaluate(() => (document.querySelector('link[rel="manifest"]') as HTMLLinkElement | null)?.href);
     expect(href).toBeTruthy();
     const response = await this.page.request.get(href!);
@@ -41,7 +36,7 @@ export class PwaPage {
   async expectIcons() {
     const manifest = await this.manifest();
     const apple = await this.page.evaluate(() => (document.querySelector('link[rel="apple-touch-icon"]') as HTMLLinkElement | null)?.href);
-    expect(apple).toBeTruthy();
+    if (!apple) throw new Error('apple-touch-icon link not found');
     const icons: { src: string; sizes: string }[] = [...manifest.icons, { src: apple, sizes: '180x180' }];
     for (const icon of icons) {
       const url = new URL(icon.src, this.page.url()).href;

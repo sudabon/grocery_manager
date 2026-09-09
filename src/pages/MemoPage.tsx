@@ -19,7 +19,7 @@ export function MemoPage() {
   const [bannerClosed, setBannerClosed] = useState(false);
   const commit = useCallback((text: string) => commitText(text, toast.notify), [toast.notify]);
   return <main className="memo-page" aria-label="メモ">
-    {!storageAvailable && !bannerClosed && <aside className="storage-banner" aria-label="保存できない環境の案内">
+    {!storageAvailable && !bannerClosed && <aside className="banner storage-banner" aria-label="保存できない環境の案内">
       <p>この環境ではデータを端末に保存できません。ページを閉じると変更が失われます。</p>
       <button type="button" aria-label="保存の案内を閉じる" onClick={() => setBannerClosed(true)}>閉じる</button>
     </aside>}

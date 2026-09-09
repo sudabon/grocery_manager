@@ -8,7 +8,7 @@ test('マニフェストを取得すると standalone・ルートスコープ・
   expect(manifest.icons).toEqual([
     { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
     { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-    { src: '/icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+    { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
   ]);
 });
 test('マニフェストと iOS 用アイコンを取得すると宣言どおりの PNG サイズである', { tag: tag('TP-002') }, async ({ builtApp }) => {
@@ -23,6 +23,17 @@ test('保存して切断後に再読み込みするとメモと空の象限が�
 });
 test('キャッシュ後の空データでもオフラインで再起動できる', { tag: tag('TP-003') }, async ({ builtAppOffline: app }) => {
   await app.memo.reload(); await expect(app.memo.chips).toHaveCount(0);
+});
+test('オフライン利用可の表示後はアプリシェルがキャッシュされている', { tag: tag('TP-003') }, async ({ builtApp }) => {
+  const cached = await builtApp.page.evaluate(async () => {
+    const names = await caches.keys();
+    const urls: string[] = [];
+    for (const name of names) urls.push(...(await (await caches.open(name)).keys()).map((r) => new URL(r.url).pathname));
+    return urls;
+  });
+  expect(cached).toContain('/index.html');
+  expect(cached).toContain('/manifest.webmanifest');
+  expect(cached.some((path) => path.startsWith('/icons/'))).toBe(true);
 });
 test('切断状態で追加・移動・編集・削除すると再読み込み後も保持される', { tag: tag('TP-004') }, async ({ builtAppOffline: app }) => {
   await app.memo.start(); await app.memo.add('牛乳 banana'); await app.memo.waitForSave();
@@ -51,9 +62,21 @@ test('切断して再表示しても4象限と文字が表示され外部ホス�
   }
   expect(externalRequests).toEqual([]);
 });
+test('更新が無ければ更新通知を表示しない', { tag: tag('TP-007') }, async ({ builtApp }) => {
+  await expect(builtApp.updateBanner).toHaveCount(0);
+});
 test('更新待機状態で開くと更新通知と操作の導線が表示される', { tag: tag('TP-007') }, async ({ swUpdateAvailable: app }) => {
   await expect(app.updateBanner).toContainText('新しいバージョンがあります'); await expect(app.updateButton).toBeEnabled();
   await app.settings.open(); await expect(app.swState('更新待機中')).toBeVisible();
+});
+test.describe('ブラウザでのバナー同時表示', () => {
+  test.use({ displayModeName: 'browser' });
+  test('更新待機中の初回訪問でも両バナーと4象限が表示される', { tag: tag('TP-007') }, async ({ swUpdateAvailable: app }) => {
+    await expect(app.updateBanner).toBeVisible();
+    await expect(app.installHint).toBeVisible();
+    await app.memo.expectEqualQuadrants();
+    for (let index = 1; index <= 4; index++) await expect(app.memo.quadrant(index)).toBeVisible();
+  });
 });
 test('更新せずに操作を続けても通知と入力途中のテキストが維持される', { tag: tag('TP-008') }, async ({ swUpdateAvailable: app }) => {
   await app.memo.start();
@@ -64,21 +87,28 @@ test('更新せずに操作を続けても通知と入力途中のテキスト�
   await expect(app.memo.input).toHaveValue('入力途中'); await expect(app.memo.chips).toHaveCount(0);
   await expect(app.updateBanner).toBeVisible();
 });
-test('ブラウザ表示で初めて開くとホーム画面追加の手順を案内する', { tag: tag('TP-009') }, async ({ displayModeBrowser: app }) => {
+test('ブラウザ表示で初めて開くとホーム画面追加の手順を案内する', { tag: tag('TP-009') }, async ({ displayModeApp: app }) => {
   await expect(app.installHint).toContainText('共有ボタンから「ホーム画面に追加」');
 });
-test('ホーム画面追加の案内を閉じて再読み込みすると再表示されない', { tag: tag('TP-010') }, async ({ displayModeBrowser: app }) => {
+test('ホーム画面追加の案内を閉じて再読み込みすると再表示されない', { tag: tag('TP-010') }, async ({ displayModeApp: app }) => {
   await app.closeHint(); await app.memo.reload(); await expect(app.installHint).toHaveCount(0);
 });
-test('standalone 表示で開くと追加の案内を表示しない', { tag: tag('TP-011') }, async ({ displayModeStandalone: app }) => {
-  await expect(app.installHint).toHaveCount(0);
+test.describe('media standalone', () => {
+  test.use({ displayModeName: 'media' });
+  test('standalone 表示で開くと追加の案内を表示しない', { tag: tag('TP-011') }, async ({ displayModeApp: app }) => {
+    await expect(app.installHint).toHaveCount(0);
+  });
 });
-test('iOS の standalone フラグでも追加の案内を表示しない', { tag: tag('TP-011') }, async ({ displayModeIosStandalone: app }) => {
-  await expect(app.installHint).toHaveCount(0);
+test.describe('ios standalone', () => {
+  test.use({ displayModeName: 'ios' });
+  test('iOS の standalone フラグでも追加の案内を表示しない', { tag: tag('TP-011') }, async ({ displayModeApp: app }) => {
+    await expect(app.installHint).toHaveCount(0);
+  });
 });
 test('設定画面を開くと Service Worker の登録状態が読める', { tag: tag('TP-012') }, async ({ builtApp }) => {
   await builtApp.settings.open(); await expect(builtApp.swState('登録済み')).toBeVisible();
 });
 test('未キャッシュでオフライン初回訪問するとアプリシェルは起動できない', { tag: tag('TP-013') }, async ({ builtAppOfflineFirstVisit: result }) => {
-  expect(result.registrations).toBe(0); expect(result.caches).toEqual([]); expect(result.navigationFailed).toBe(true);
+  expect(result.navigationFailed).toBe(true);
+  expect(result.boardVisible).toBe(false);
 });

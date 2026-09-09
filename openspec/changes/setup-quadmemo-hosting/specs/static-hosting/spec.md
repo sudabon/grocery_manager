@@ -43,7 +43,7 @@ QuadMemo のアプリシェルを独自サブドメインの HTTPS で配信し�
 
 ### Requirement: 更新が届くキャッシュ制御
 
-配信基盤は、エントリポイント資産（`index.html`、`sw.js`、`registerSW.js`、`manifest.webmanifest`）を再検証なしでキャッシュしてはならない（MUST NOT）。内容ハッシュをファイル名に含むアセットは長期・不変としてキャッシュしなければならない（MUST）。
+配信基盤は、エントリポイント資産（`index.html`、`sw.js`、`manifest.webmanifest`、`icons/icon-192.png`、`icons/icon-512.png`、`icons/apple-touch-icon-180.png`）を再検証なしでキャッシュしてはならない（MUST NOT）。内容ハッシュをファイル名に含むアセットは長期・不変としてキャッシュしなければならない（MUST）。
 
 キャッシュポリシーの最低 TTL と既定 TTL は 0 秒、最大 TTL は 31536000 秒に設定し、オリジンの `Cache-Control` を尊重しなければならない（MUST）。SPA フォールバックに対する上記の最小 1 秒の例外は、通常のエントリポイント応答には適用しない（MUST NOT）。
 

@@ -15,6 +15,48 @@ has_tag() {
   return "$status"
 }
 
+# 通常の --list はタグを表示しないため、JSON の実行時 tags を照合する。
+check_tp_ids() {
+  local id="$1" report
+  if ! report=$(npx playwright test --list --grep "@$id" --reporter=json); then
+    echo "::error::$id の Playwright テスト一覧を取得できません" >&2
+    return 2
+  fi
+  node -e '
+    const fs = require("node:fs");
+    const id = process.argv[1];
+    try {
+      const report = JSON.parse(fs.readFileSync(0, "utf8"));
+      if (!Array.isArray(report.suites) || report.errors?.length) {
+        throw new Error("Playwright テスト一覧が不正、または収集エラーがあります");
+      }
+      const plan = fs.readFileSync(`openspec/changes/${id}/test-plan.md`, "utf8");
+      const planned = [...new Set(plan.match(/\bTP-\d+\b/g) ?? [])].sort();
+      if (!planned.length) throw new Error("test-plan.md に TP-ID がありません");
+      const found = new Set();
+      function walk(suite) {
+        for (const spec of suite.specs ?? []) {
+          const tags = (spec.tags ?? []).map(tag => tag.replace(/^@/, ""));
+          // --grep は部分一致なので、似た change ID のテストで欠落を埋めない。
+          if (!tags.includes(id)) continue;
+          for (const tag of tags) if (/^TP-\d+$/.test(tag)) found.add(tag);
+        }
+        for (const child of suite.suites ?? []) walk(child);
+      }
+      for (const suite of report.suites) walk(suite);
+      const missing = planned.filter(tp => !found.has(tp));
+      if (missing.length) {
+        console.error(`::error::${id} のテストに未実装の TP-ID: ${missing.join(", ")}`);
+        process.exit(1);
+      }
+      console.log(`TP-ID: ${id} ${planned.length}/${planned.length}`);
+    } catch (error) {
+      console.error(`::error::${id} の TP-ID 検証に失敗しました: ${error.message}`);
+      process.exit(2);
+    }
+  ' "$id" <<< "$report"
+}
+
 # 差分モード用。作業ツリーではなく HEAD のコミット済みツリーを検索する。
 # git pathspec の '*' は '/' を跨ぐため、has_tag の --include と対象が一致する。
 has_tag_in_head() {
@@ -131,6 +173,11 @@ for id in $ids; do
       echo "::error::@$id タグ付きの E2E テストが tests/e2e/ にありません"
     fi
     fail=1
+  elif [ "$mode" = change ]; then
+    status=0
+    check_tp_ids "$id" || status=$?
+    if [ "$status" -gt 1 ]; then exit "$status"; fi
+    if [ "$status" -eq 1 ]; then fail=1; fi
   fi
   echo "Checked: $id"
 done

@@ -1,12 +1,15 @@
 import 'fake-indexeddb/auto';
-import { deleteDB } from 'idb';
+import { deleteDB, unwrap } from 'idb';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { openQuadmemoDb, type MemoItem } from '../schema';
 import { createRepository, requestPersistence } from '../repository';
-import { defaultSettings } from '../defaults';
+import { defaultSettings, seedDictionaries } from '../defaults';
 
 let db: Awaited<ReturnType<typeof openQuadmemoDb>>;
 let repo: ReturnType<typeof createRepository>;
+const memo = (id: string, createdAt = 1): MemoItem => ({ id, rawText: '牛乳', normText: '牛乳', quadrant: 'q3', matchedEntry: '牛乳', autoClassified: true, createdAt, updatedAt: createdAt });
+beforeEach(async () => { db = await openQuadmemoDb(); repo = createRepository(async () => db); });
+afterEach(async () => { db.close(); await deleteDB('quadmemo'); vi.unstubAllGlobals(); });
 it('インポートで端末のインストール案内の記録をリセットしない', async () => {
   await repo.seed();
   await repo.saveSettings({ ...defaultSettings, installHintDismissed: true });
@@ -15,9 +18,36 @@ it('インポートで端末のインストール案内の記録をリセット�
   expect(imported.settings).toMatchObject({ partialMatch: true, installHintDismissed: true });
   expect(await repo.getSettings()).toEqual(imported.settings);
 });
-const memo = (id: string, createdAt = 1): MemoItem => ({ id, rawText: '牛乳', normText: '牛乳', quadrant: 'q3', matchedEntry: '牛乳', autoClassified: true, createdAt, updatedAt: createdAt });
-beforeEach(async () => { db = await openQuadmemoDb(); repo = createRepository(async () => db); });
-afterEach(async () => { db.close(); await deleteDB('quadmemo'); vi.unstubAllGlobals(); });
+it('旧設定は端末設定の既定値を補い、インポートした端末設定を採用しない', async () => {
+  await repo.seed();
+  const { installHintDismissed: _dismissed, ...legacy } = defaultSettings;
+  // 型分割以前に保存されたレコードを native IDB で再現する。
+  const tx = db.transaction('settings', 'readwrite');
+  unwrap(tx.store).put(legacy);
+  await tx.done;
+  expect(await repo.getSettings()).toEqual(defaultSettings);
+  expect(await db.get('settings', 'app')).toEqual(legacy);
+  const incoming = { ...legacy, partialMatch: true, installHintDismissed: true };
+  const imported = await repo.applyImport({ dictionaries: await repo.getDictionaries(), memos: [], settings: incoming });
+  expect(imported.settings).toEqual({ ...defaultSettings, partialMatch: true });
+  expect(await repo.getSettings()).toEqual(imported.settings);
+});
+it('settings レコードが無い状態のインポートでは案内を閉じたフラグを採用しない', async () => {
+  expect(await db.get('settings', 'app')).toBeUndefined();
+  const incoming = { ...defaultSettings, partialMatch: true, installHintDismissed: true };
+  const imported = await repo.applyImport({ dictionaries: seedDictionaries(), memos: [], settings: incoming });
+  expect(imported.settings).toMatchObject({ partialMatch: true, installHintDismissed: false });
+  expect(await db.get('settings', 'app')).toEqual(imported.settings);
+  expect(await repo.getSettings()).toEqual(imported.settings);
+});
+it('インポートで端末の明示的な false も保持される', async () => {
+  await repo.saveSettings({ ...defaultSettings, installHintDismissed: false });
+  const incoming = { ...defaultSettings, partialMatch: true, installHintDismissed: true };
+  const imported = await repo.applyImport({ dictionaries: seedDictionaries(), memos: [], settings: incoming });
+  expect(imported.settings).toMatchObject({ partialMatch: true, installHintDismissed: false });
+  expect(await db.get('settings', 'app')).toEqual(imported.settings);
+  expect(await repo.getSettings()).toEqual(imported.settings);
+});
 it('v1スキーマとメモCRUD・作成順・象限別取得', async () => {
   expect(db.version).toBe(1);
   expect([...db.objectStoreNames]).toEqual(['dictionaries', 'memos', 'settings']);

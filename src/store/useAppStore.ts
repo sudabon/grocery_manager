@@ -29,7 +29,8 @@ interface AppStore {
   removeChip: (id: string) => Promise<void>;
   clearAll: () => Promise<boolean>;
   saveDictionary: (quadrant: QuadrantId, label: string, rawText: string) => Promise<boolean>;
-  updateSettings: (patch: Partial<Omit<AppSettings, 'key'>>) => Promise<boolean>;
+  updateSettings: (patch: Partial<Omit<AppSettings, 'key' | 'installHintDismissed'>>) => Promise<boolean>;
+  dismissInstallHint: () => Promise<void>;
   importData: (data: AppData | { dictionaries: Dictionary[] }) => Promise<boolean>;
 }
 // Strip transient display flags before writing a memo back to IndexedDB.
@@ -66,17 +67,26 @@ export function createAppStore(repo: Repository = repository, persist = requestP
     // It deliberately does NOT retry: the caller shows the failure and the user can repeat the action, because
     // nothing on screen changed. save() is optimistic and must retry, since it already committed the change to
     // the UI and a late failure would otherwise leave the screen disagreeing with the database.
-    function apply(operation: () => Promise<void>, failureText = '保存できませんでした。変更は端末に保存されていません。'): Promise<boolean> {
+    // `failureText: null` suppresses the notice while keeping the write queued and counted.
+    // Use it for actions whose failure the user does not need to act on (see dismissInstallHint).
+    function apply(operation: () => Promise<void>, options: { failureText?: string | null } = {}): Promise<boolean> {
+      const failureText = options.failureText === undefined ? '保存できませんでした。変更は端末に保存されていません。' : options.failureText;
       set((state) => ({ pendingWrites: state.pendingWrites + 1 }));
       const result = writeQueue.then(async () => {
         try { await operation(); return true; }
         catch {
-          set((state) => ({ saveErrors: [...state.saveErrors, { text: failureText }] }));
+          if (failureText) set((state) => ({ saveErrors: [...state.saveErrors, { text: failureText }] }));
           return false;
         }
       }).finally(() => set((state) => ({ pendingWrites: state.pendingWrites - 1 })));
       writeQueue = result.then(() => {});
       return result;
+    }
+    async function writeSettings(patch: Partial<AppSettings>) {
+      const settings = { ...get().settings, ...patch };
+      settings.autoCommitMs = clampAutoCommitMs(settings.autoCommitMs);
+      await repo.saveSettings(settings);
+      set({ settings });
     }
     function highlight(id: string) {
       clearTimeout(highlights.get(id));
@@ -152,27 +162,38 @@ export function createAppStore(repo: Repository = repository, persist = requestP
       clearAll: () => apply(async () => {
         await repo.clearMemos();
         set({ chips: [] });
-      }, 'メモを削除できませんでした。メモは削除されていません。'),
+      }, { failureText: 'メモを削除できませんでした。メモは削除されていません。' }),
       saveDictionary: (quadrant, label, rawText) => apply(async () => {
         const dictionary = { quadrant, label: label.trim(), entries: sanitizeEntries(rawText), updatedAt: Date.now() };
         await repo.saveDictionary(dictionary);
         const dictionaries = get().dictionaries.map((d) => d.quadrant === quadrant ? dictionary : d);
         set({ dictionaries, normalizedDicts: buildNormalizedDicts(dictionaries) });
       }),
-      updateSettings: (patch) => apply(async () => {
-        const settings = { ...get().settings, ...patch };
-        settings.autoCommitMs = clampAutoCommitMs(settings.autoCommitMs);
-        await repo.saveSettings(settings);
-        set({ settings });
-      }),
+      updateSettings: (patch) => apply(() => writeSettings(patch)),
+      // 利用者は何も保存していないため汎用の保存失敗通知は出さない。ただし書き込み自体は
+      // apply() のキューと pendingWrites に載せる（保存前に再読み込みされると案内が復活するため）。
+      // 保存不可環境ではフラグを残せず次回起動時にも案内が出ることを許容する。
+      // apply() のキューに載せるのは、保存完了を pendingWrites 経由で観測可能にするため
+      // （E2E の TP-010 が閉じた後の再読み込みでこれに依存する）。副作用として
+      // 設定画面の保存系ボタンが書き込み中だけ disabled になることを許容する。
+      dismissInstallHint: async () => {
+        await apply(async () => {
+          try { await writeSettings({ installHintDismissed: true }); }
+          catch (error) {
+            // 利用者には通知しないが、恒久的に書けない端末を切り分けられるよう痕跡は残す。
+            console.warn('[settings] install hint dismissal not persisted', error);
+            throw error;
+          }
+        }, { failureText: null });
+      },
       importData: (input) => apply(async () => {
         const data = await repo.applyImport(input);
         set((state) => ({ dictionaries: data.dictionaries, normalizedDicts: buildNormalizedDicts(data.dictionaries),
-          ...('memos' in input ? { settings: data.settings,
+          ...(data.settings ? { settings: data.settings,
             chips: [...state.chips, ...skipExistingMemos(data.memos, state.chips.map((chip) => chip.id))]
               .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)) } : {}),
         }));
-      }, 'インポートできませんでした。データは変更されていません。'),
+      }, { failureText: 'インポートできませんでした。データは変更されていません。' }),
     };
   });
 }

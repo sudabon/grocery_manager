@@ -17,15 +17,20 @@ export interface Dictionary {
   entries: string[];
   updatedAt: number;
 }
-export interface AppSettings {
-  key: 'app';
+/** バックアップに含める設定。エクスポート・インポートの対象。 */
+export interface PortableSettings {
+  key: string;
   partialMatch: boolean;
   autoCommitMs: number;
   allowDuplicates: boolean;
   showDictationHint: boolean;
-  /** Device-local onboarding state, absent in older settings records. */
-  installHintDismissed?: boolean;
 }
+/** 端末固有の設定。エクスポートに含めず、インポートでも既存値を保持する。 */
+export interface DeviceSettings {
+  installHintDismissed: boolean;
+}
+export type AppSettings = PortableSettings & DeviceSettings;
+
 export interface QuadmemoDb extends DBSchema {
   memos: { key: string; value: MemoItem; indexes: { quadrant: QuadrantId; createdAt: number } };
   dictionaries: { key: QuadrantId; value: Dictionary };

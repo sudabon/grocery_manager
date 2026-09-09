@@ -1,5 +1,7 @@
+import type { dictionaryExport, fullExport } from './portability';
+
 // Call directly from the click handler: do not await database reads before share().
-export function shareExport(value: unknown, name: string): Promise<void> {
+export function shareExport(value: ReturnType<typeof fullExport> | ReturnType<typeof dictionaryExport>, name: string): Promise<void> {
   const file = new File([JSON.stringify(value, null, 2)], name, { type: 'application/json' });
   let canShare = false;
   try { canShare = !!navigator.share && !!navigator.canShare?.({ files: [file] }); } catch { /* Use download when capability detection fails. */ }

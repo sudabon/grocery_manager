@@ -39,8 +39,8 @@ async function runDeploy(t, config = {}, { hasRemovedAssetsStub } = {}) {
 
 const awsCalls = result => result.calls.filter(call => call.command === 'aws').map(call => call.args);
 
-const ICONS = ['icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon-180.png'];
-const ENTRYPOINTS = ['index.html', 'sw.js', 'registerSW.js', 'manifest.webmanifest', ...ICONS];
+const ICONS = ['icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon-180.png'];
+const ENTRYPOINTS = ['index.html', 'sw.js', 'manifest.webmanifest', ...ICONS];
 const ENTRYPOINT_PATHS = ENTRYPOINTS.map(file => '/' + file);
 
 // find の結果が undefined だと TypeError になり、本当の原因（無効化が呼ばれていない）が
@@ -64,7 +64,6 @@ test('プレースホルダーのみでも成功し、存在しないエント�
     's3://quadmemo-app-123456789012/index.html', '--cache-control', 'no-cache']]);
   assert.deepEqual(calls.filter(args => args[1] === 'rm').map(args => args[2]), [
     's3://quadmemo-app-123456789012/sw.js',
-    's3://quadmemo-app-123456789012/registerSW.js',
     's3://quadmemo-app-123456789012/manifest.webmanifest',
     ...ICONS.map(file => 's3://quadmemo-app-123456789012/' + file),
   ]);
@@ -75,7 +74,7 @@ test('プレースホルダーのみでも成功し、存在しないエント�
 });
 
 test('全エントリポイントを no-cache とし、長期キャッシュ同期から除外する', async t => {
-  const files = { 'index.html': 'html', 'sw.js': 'sw', 'registerSW.js': 'register',
+  const files = { 'index.html': 'html', 'sw.js': 'sw',
     'manifest.webmanifest': '{}', 'assets/app-abc12345.js': 'app', ...Object.fromEntries(ICONS.map(file => [file, 'icon'])) };
   const result = await runDeploy(t, { files, remoteKeys: Object.keys(files) });
   assert.equal(result.status, 0, result.stderr);
@@ -130,11 +129,11 @@ test('S3 に実在するエントリポイントを消すときだけ警告す�
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stderr, /dist\/sw\.js がビルド成果物に無く、S3 には存在します/);
   // 最初から S3 に無いものは正常系なので警告しない。
-  assert.doesNotMatch(result.stderr, /registerSW\.js がビルド成果物に無く/);
+  assert.doesNotMatch(result.stderr, /icons\/icon-192\.png がビルド成果物に無く/);
   assert.doesNotMatch(result.stderr, /manifest\.webmanifest がビルド成果物に無く/);
 });
 
-for (const file of ['sw.js', 'registerSW.js', 'manifest.webmanifest']) {
+for (const file of ['sw.js', 'manifest.webmanifest']) {
   test(`空のエントリポイント ${file} ではデプロイを中止する`, async t => {
     const result = await runDeploy(t, { files: { 'index.html': '<h1>x</h1>', [file]: '' } });
     assert.equal(result.status, 1);
