@@ -81,5 +81,5 @@
 - [x] 8.3 `bash scripts/check-test-plan.sh --change add-quadmemo-daily-boards` が全 TP-ID の対応を報告することを確認
 - [x] 8.4 `npx playwright test --grep "@add-quadmemo-daily-boards"` が全件パス（フレーク 0 件）することを確認
 - [x] 8.5 `npx playwright test` の全件実行で既存の全 change に回帰が無いことを確認。特に `add-quadmemo-quadrant-ui`（コミット・チップ操作・画面遷移）、`add-quadmemo-classification`（永続化）、`add-quadmemo-dictionaries`（全データの往復とファイル名）、`add-quadmemo-board-image-share`（共有画像のファイル名）
-- [ ] 8.6 実機の iPhone で、当日ボードの作成・過去ボードの参照・過去ボードからの画像共有が動くことを確認
-- [ ] 8.7 実機で、JST 0:00 をまたいでアプリを開き直すと当日の白紙ボードから始まることを確認
+- [x] 8.6 実機の iPhone で、当日ボードの作成・過去ボードの参照・過去ボードからの画像共有が動くことを確認
+- [x] 8.7 実機で、JST 0:00 をまたいでアプリを開き直すと当日の白紙ボードから始まることを確認

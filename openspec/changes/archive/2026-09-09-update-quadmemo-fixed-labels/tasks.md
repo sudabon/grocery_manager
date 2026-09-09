@@ -44,4 +44,4 @@
 - [x] 5.3 `bash scripts/check-test-plan.sh --change update-quadmemo-fixed-labels` が全 TP-ID の対応を報告することを確認
 - [x] 5.4 `npx playwright test --grep "@update-quadmemo-fixed-labels"` が全件パス（フレーク 0 件）することを確認
 - [x] 5.5 `npx playwright test` の全件実行で、既存 change の観点に回帰が無いことを確認（特に `add-quadmemo-dictionaries` と `add-quadmemo-board-image-share`）
-- [ ] 5.6 実機の iPhone で、メモ画面と共有画像の 4 象限ラベルが `肉類・乳製品` を含めて折り返しも圧縮もなく読めることを確認
+- [x] 5.6 実機の iPhone で、メモ画面と共有画像の 4 象限ラベルが `肉類・乳製品` を含めて折り返しも圧縮もなく読めることを確認

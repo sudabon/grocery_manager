@@ -53,4 +53,4 @@
 - [x] 7.3 `bash scripts/check-test-plan.sh --change add-quadmemo-memo-length-limit` が全 TP-ID の対応を報告することを確認
 - [x] 7.4 `npx playwright test --grep "@add-quadmemo-memo-length-limit"` が全件パス（フレーク 0 件）することを確認
 - [x] 7.5 `npx playwright test` の全件実行で既存観点に回帰が無いことを確認（特に `add-quadmemo-quadrant-ui` のコミット境界とチップ操作、`add-quadmemo-dictionaries` のインポート）
-- [ ] 7.6 実機の iPhone で、上限いっぱいの象限を含むボードから共有画像を生成でき、エラー案内が出ないことを確認
+- [x] 7.6 実機の iPhone で、上限いっぱいの象限を含むボードから共有画像を生成でき、エラー案内が出ないことを確認
