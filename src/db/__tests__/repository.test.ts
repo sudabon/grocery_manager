@@ -7,6 +7,14 @@ import { defaultSettings } from '../defaults';
 
 let db: Awaited<ReturnType<typeof openQuadmemoDb>>;
 let repo: ReturnType<typeof createRepository>;
+it('インポートで端末のインストール案内の記録をリセットしない', async () => {
+  await repo.seed();
+  await repo.saveSettings({ ...defaultSettings, installHintDismissed: true });
+  const data = await repo.getAllData();
+  const imported = await repo.applyImport({ ...data, settings: { ...defaultSettings, partialMatch: true } });
+  expect(imported.settings).toMatchObject({ partialMatch: true, installHintDismissed: true });
+  expect(await repo.getSettings()).toEqual(imported.settings);
+});
 const memo = (id: string, createdAt = 1): MemoItem => ({ id, rawText: '牛乳', normText: '牛乳', quadrant: 'q3', matchedEntry: '牛乳', autoClassified: true, createdAt, updatedAt: createdAt });
 beforeEach(async () => { db = await openQuadmemoDb(); repo = createRepository(async () => db); });
 afterEach(async () => { db.close(); await deleteDB('quadmemo'); vi.unstubAllGlobals(); });

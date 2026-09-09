@@ -7,6 +7,7 @@ it('辞書と全データを往復でき、一時表示フラグは出力しな�
   expect(parseDictionaryImport(JSON.stringify(dictionaryExport(data().dictionaries)))).toEqual(data().dictionaries);
   expect(parseFullImport(JSON.stringify(fullExport(data())))).toEqual(data());
   expect(fullExport({ ...data(), memos: [{ ...memo, unsaved: true } as typeof memo] }).memos[0]).not.toHaveProperty('unsaved');
+  expect(fullExport({ ...data(), settings: { ...defaultSettings, installHintDismissed: true } }).settings).not.toHaveProperty('installHintDismissed');
   expect(parseFullImport(JSON.stringify(fullExport({ ...data(), memos: [] }))).memos).toEqual([]);
 });
 it.each(['{', 'null', '[]', '{"version":2}', '{"version":1}'])('不正な辞書JSONを拒否: %s', (text) => {

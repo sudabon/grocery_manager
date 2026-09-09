@@ -58,7 +58,9 @@ export function subscribeUpdates(onNeedRefresh: () => void): { update(): Promise
 ### D6: PWA 系 E2E はビルド成果物（preview サーバー）に対して実行する
 
 - 開発サーバーでは Service Worker の precache が本番と同じにならないため、Service Worker とオフラインの検証は `npm run build` 済みの成果物を配信する preview サーバーに対して行う
-- `playwright.config.ts` の `webServer` を配列にし、既存の dev サーバー（ポート 3000）に加えて preview サーバー（ポート 3001）を起動する。`pwa` プロジェクト（`mobile-safari` 相当のデバイス設定）だけが 3001 を `baseURL` として使う
+- `playwright.config.ts` の `webServer` を配列にし、既存の dev サーバー（ポート 3000）に加えて preview サーバー（ポート 3001）を起動する。`pwa` プロジェクトだけが 3001 を `baseURL` として使う
+- `pwa` は iPhone 13 プリセットの画面・タッチ等の条件を維持し、`browserName: 'chromium'` で実行する。Playwright の Service Worker 検証は Chromium 系がサポート対象であり、WebKit ではオフライン再読み込みが内部エラーになることを確認したため（2026-09-09 利用者承認）。既存の `mobile-safari` プロジェクトは WebKit を維持する
+- Safari 固有の Service Worker・オフライン動作は既存の iPhone 実機受け入れ（6.1〜6.12）で確認する。Chromium のデバイスエミュレーションを実機検証の代替にしない
 - `E2E_BASE_URL` が設定されている場合は両方とも起動しない（`setup-quadmemo-hosting` の配信先 E2E と共存させる）
 - **トレードオフ**: E2E 全体の実行前にビルドが 1 回走るため起動が遅くなる。PWA の検証を本番相当で行う価値の方が大きい
 

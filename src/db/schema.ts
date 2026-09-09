@@ -23,6 +23,8 @@ export interface AppSettings {
   autoCommitMs: number;
   allowDuplicates: boolean;
   showDictationHint: boolean;
+  /** Device-local onboarding state, absent in older settings records. */
+  installHintDismissed?: boolean;
 }
 export interface QuadmemoDb extends DBSchema {
   memos: { key: string; value: MemoItem; indexes: { quadrant: QuadrantId; createdAt: number } };

@@ -7,8 +7,10 @@ import { shareExport } from '../core/shareExport';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { SaveFeedback } from '../components/SaveFeedback';
 import { useToast } from '../components/Toast';
+import { usePwaState } from '../pwa/usePwaState';
 
 export function SettingsPage() {
+  const pwa = usePwaState();
   const settings = useAppStore((state) => state.settings);
   const permission = useAppStore((state) => state.persistencePermission);
   const pendingWrites = useAppStore((state) => state.pendingWrites);
@@ -102,6 +104,7 @@ export function SettingsPage() {
     </section>
     <section className="settings-section" aria-label="アプリ情報"><h3>アプリ情報</h3>
       <p>バージョン {import.meta.env.VITE_APP_VERSION}</p>
+      <p>Service Worker：{{ registered: '登録済み', waiting: '更新待機中', unregistered: '未登録' }[pwa.status]}</p>
       <p>ストレージ永続化：{permission === null ? '確認中' : { granted: '許可されています', denied: '許可されていません', unsupported: 'この環境は非対応です' }[permission]}</p>
       <p>メモ・辞書・設定は端末内に保存します。アプリから外部へのネットワーク送信は行いません。エクスポートは利用者が選んだ保存先へ渡します。</p>
     </section>

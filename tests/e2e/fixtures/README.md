@@ -62,3 +62,20 @@ fixture は各テストの前にべき等に状態を作り直し、テスト間
 | `files/unsupported.json` | schemaVersion 99 の全データを拒否 |
 | `files/collision.json` | 既存 apple と同じ ID で本文・正規化本文が「上書き禁止」のメモと、新しい orange の ID を含む。既存 apple を上書きせず衝突をスキップし新規だけ追加 |
 | `files/all-data.json` | 正常な全データ。上書き確認の中止、復元に使用 |
+# PWA fixtures
+
+`pwa.ts` の fixture 直接方式。`pwa` プロジェクト（iPhone 13 の表示・タッチ条件 / Chromium）は開発サーバーではなく
+ポート 3001 のビルド成果物を使う。`E2E_BASE_URL` 指定時は指定先を使い、ローカルサーバーは起動しない。
+Safari 固有の Service Worker・オフライン動作は iPhone 実機で確認する（design.md - D6）。
+
+| 状態名 | fixture | 作られる状態 |
+|---|---|---|
+| `env:built-app` | `builtApp` | 実 SW の precache・有効化・ページ制御を待ち「オフライン利用可」が表示されたアプリ |
+| `env:built-app-offline` | `builtAppOffline` | 上記の完了後に context をオフラインへ切り替える |
+| `env:built-app-offline-first-visit` | `builtAppOfflineFirstVisit` | 新規 context の同一 origin の空ページで登録・キャッシュが空と観測し、オフラインの別ページで初回アプリ起動を試みる |
+| `env:sw-update-available` | `swUpdateAvailable` | 実 SW を登録し、ブラウザ API の waiting 状態を注入。通知と非更新時の入力維持を確認する。実適用は実機検証 |
+| `env:display-mode-browser` | `displayModeBrowser` | matchMedia と navigator.standalone の両方が false、未案内の初期状態 |
+| `env:display-mode-standalone` | `displayModeStandalone` / `displayModeIosStandalone` | media のみ true / iOS フラグのみ true を別々に検証 |
+
+`externalRequests` は自動 fixture として初回ナビゲーション前から context の要求を収集する。
+各テストは独立した context を使うため、キャッシュや IndexedDB を他テストから引き継がない。

@@ -38,6 +38,10 @@ export function createRepository(connect: () => Promise<IDBPDatabase<QuadmemoDb>
         for (const dictionary of data.dictionaries) await tx.objectStore('dictionaries').put(dictionary);
         let added: MemoItem[] = [];
         if (full) {
+          const currentSettings = await tx.objectStore('settings').get('app');
+          if (currentSettings && 'installHintDismissed' in currentSettings) {
+            data.settings.installHintDismissed = currentSettings.installHintDismissed;
+          }
           await tx.objectStore('settings').put(data.settings);
           const store = tx.objectStore('memos');
           added = skipExistingMemos(data.memos, await store.getAllKeys());

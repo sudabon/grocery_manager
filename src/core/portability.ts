@@ -48,7 +48,7 @@ export function dictionaryExport(value: Dictionary[]) { return { version: 1, dic
 export function fullExport(data: AppData, now = new Date()) {
   return { app: 'quadmemo', schemaVersion: 1, exportedAt: now.toISOString(),
     dictionaries: data.dictionaries, memos: data.memos.map(({ id, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt }) =>
-      ({ id, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt })), settings: data.settings };
+      ({ id, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt })), settings: settings(data.settings) };
 }
 export function parseDictionaryImport(text: string): Dictionary[] {
   let parsed: unknown;
