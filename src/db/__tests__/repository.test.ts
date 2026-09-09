@@ -76,7 +76,7 @@ it('初期データ投入と辞書・設定の更新は独立し上書きしな�
   await repo.seed();
   const dictionaries = await repo.getDictionaries();
   expect(dictionaries.map((dict) => dict.label)).toEqual(['それ以外', '野菜', '肉類・乳製品', 'ドラッグストア']);
-  expect(dictionaries[0].entries).toContain('会議');
+  expect(dictionaries.map((dict) => dict.entries)).toEqual([[], ['にんじん', 'たまねぎ', 'キャベツ', 'じゃがいも'], ['牛乳', '卵', '鶏肉', 'チーズ'], []]);
   expect(await repo.getSettings()).toEqual(defaultSettings);
   const custom = { ...dictionaries[0], label: '独自', entries: ['custom'] };
   await repo.saveDictionary(custom);
@@ -163,6 +163,15 @@ it('辞書のみのインポートはメモと設定へ書き込まない', asyn
   const before = await repo.getAllData();
   await repo.applyImport({ dictionaries: before.dictionaries.map((d) => ({ ...d, entries: [] })) });
   expect(await repo.getMemos()).toEqual(before.memos); expect(await repo.getSettings()).toEqual(before.settings);
+});
+
+it('既存メモが上限を超えていても辞書のみのインポートは成功する', async () => {
+  await repo.seed();
+  await repo.putMemos([{ ...memo('over'), rawText: 'a'.repeat(101), quadrant: 'q1' }]);
+  const before = await repo.getAllData();
+  await repo.applyImport({ dictionaries: before.dictionaries.map((d) => ({ ...d, entries: ['changed'] })) });
+  expect((await repo.getDictionaries())[0].entries).toEqual(['changed']);
+  expect(await repo.getMemos()).toEqual(before.memos);
 });
 
 it.each([0, 60])('インポートは既存%d文字との統合後に100文字を超えると全ストア無変更', async (length) => {

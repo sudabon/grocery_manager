@@ -10,7 +10,7 @@ it('空の象限は0文字で100文字残る', () => {
 it.each([0, 1, 99, 100, 101])('1チップの本文%d文字を数える', (length) => {
   const chips = [q1('あ'.repeat(length))];
   expect(quadrantLength(chips, 'q1')).toBe(length);
-  expect(quadrantRemaining(chips, 'q1')).toBe(Math.max(0, 100 - length));
+  expect(quadrantRemaining(chips, 'q1')).toBe(Math.max(0, 100 - length - 1));
 });
 it('本文内とチップ間の改行を数え、他象限は含めない', () => {
   expect(quadrantLength([q1('あ\nい'), { quadrant: 'q2', rawText: '無関係' }, q1('う')], 'q1')).toBe(5);

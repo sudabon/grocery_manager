@@ -48,7 +48,7 @@ function memos(value: unknown): MemoItem[] {
 export function dictionaryExport(value: Dictionary[]) { return { version: 1, dictionaries: value.map(({ quadrant, entries, updatedAt }) => ({ quadrant, entries, updatedAt })) }; }
 export function fullExport(data: AppData, now = new Date()) {
   return { app: 'quadmemo', schemaVersion: 1, exportedAt: now.toISOString(),
-    dictionaries: data.dictionaries, memos: data.memos.map(({ id, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt }) =>
+    dictionaries: data.dictionaries.map(({ quadrant, entries, updatedAt }) => ({ quadrant, entries, updatedAt })), memos: data.memos.map(({ id, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt }) =>
       ({ id, rawText, normText, quadrant, matchedEntry, autoClassified, createdAt, updatedAt })),
     settings: settings(data.settings) };
 }

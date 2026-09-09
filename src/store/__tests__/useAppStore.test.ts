@@ -56,6 +56,7 @@ it('削除と空白編集は対象だけを削除し全消去もできる', asyn
 it.each(['granted', 'denied', 'unsupported'] as const)('起動時ロードは一度だけ実行し設定・辞書キャッシュ・永続化結果%sを保持する', async (permission) => {
   const persist = vi.fn().mockResolvedValue(permission);
   store = createAppStore(repo, persist);
+  vi.mocked(repo.getDictionaries).mockResolvedValue(seedDictionaries().map((d) => d.quadrant === 'q1' ? { ...d, entries: ['レビュー'] } : d));
   vi.mocked(repo.getMemos).mockResolvedValue([chip('saved')]);
   vi.mocked(repo.getSettings).mockResolvedValue({ ...defaultSettings, partialMatch: true });
   await Promise.all([store.getState().initialize(), store.getState().initialize()]);
@@ -123,7 +124,9 @@ it('重複OFFは正規化して同象限と一括入力内で抑止し一時強�
   await vi.advanceTimersByTimeAsync(1800); expect(store.getState().chips[0].highlighted).toBe(false);
 });
 it('辞書保存は成功後だけキャッシュを更新し既存メモは変更しない', async () => {
-  await store.getState().initialize(); await store.getState().addChips([chip('a')]);
+  await store.getState().initialize();
+  store.setState({ dictionaries: store.getState().dictionaries.map((d) => ({ ...d, label: '企画' })) });
+  await store.getState().addChips([chip('a')]);
   const before = store.getState().chips;
   expect(await store.getState().saveDictionary('q1', 'パン\nぱん')).toBe(true);
   expect(store.getState().dictionaries[0]).toMatchObject({ label: 'それ以外', entries: ['パン'] });
@@ -205,29 +208,32 @@ it('上限に達していても重複OFFの強調は容量拒否として数え�
 });
 it('編集は元の本文を置き換えて数え、超過時は本文・分類・時刻も変えない', async () => {
   store.setState({ chips: [{ ...chip('a'), rawText: 'a'.repeat(97) }, { ...chip('b'), rawText: 'b' }] });
-  expect(await store.getState().editChip('b', ' xy ')).toBe(true);
+  expect(await store.getState().editChip('b', ' xy ')).toEqual({ ok: true });
   const before = store.getState().chips;
   expect(before[1].rawText).toBe('xy');
-  expect(await store.getState().editChip('b', 'xyz')).toBe(false);
+  expect(await store.getState().editChip('b', 'xyz')).toEqual({ ok: false, reason: 'quadrant-limit' });
   expect(store.getState().chips).toEqual(before);
   expect(repo.putMemos).toHaveBeenCalledTimes(1);
 });
 it('移動先は改行込み100文字まで許可し、超過時は元の象限に留める', async () => {
   store.setState({ chips: [{ ...chip('target'), quadrant: 'q1', rawText: 'a'.repeat(98) },
     { ...chip('a'), rawText: 'b' }, { ...chip('b'), rawText: 'c' }] });
-  expect(await store.getState().moveChip('a', 'q1')).toBe(true);
+  expect(await store.getState().moveChip('a', 'q1')).toEqual({ ok: true });
   const before = store.getState().chips;
-  expect(await store.getState().moveChip('b', 'q1')).toBe(false);
+  expect(await store.getState().moveChip('b', 'q1')).toEqual({ ok: false, reason: 'quadrant-limit' });
   expect(store.getState().chips).toEqual(before);
   expect(repo.putMemos).toHaveBeenCalledTimes(1);
 });
-it('旧データの超過は自動切り詰めせず、上限内への編集と空白編集による削除を許可する', async () => {
+it('旧データの超過は自動切り詰めせず、短くする編集と空白編集による削除を許可する', async () => {
   vi.mocked(repo.getMemos).mockResolvedValue([{ ...chip('old'), rawText: 'a'.repeat(200) }]);
   await store.getState().initialize();
   expect(store.getState().chips[0].rawText).toHaveLength(200);
-  expect(await store.getState().editChip('old', 'a'.repeat(150))).toBe(false);
-  expect(await store.getState().editChip('old', 'a'.repeat(100))).toBe(true);
-  expect(await store.getState().editChip('old', '   ')).toBe(true);
+  expect(await store.getState().editChip('old', 'b'.repeat(200))).toEqual({ ok: true });
+  expect(store.getState().chips[0].rawText).toBe('b'.repeat(200));
+  expect(await store.getState().editChip('old', 'a'.repeat(250))).toEqual({ ok: false, reason: 'quadrant-limit' });
+  expect(await store.getState().editChip('old', 'a'.repeat(150))).toEqual({ ok: true });
+  expect(await store.getState().editChip('old', 'a'.repeat(100))).toEqual({ ok: true });
+  expect(await store.getState().editChip('old', '   ')).toEqual({ ok: true });
   expect(store.getState().chips).toEqual([]);
 });
 it('インポートは既存の未保存メモも合算し、超過なら辞書・設定・メモを無変更にする', async () => {
@@ -255,6 +261,6 @@ it.each(['add', 'edit', 'move', 'remove'] as const)('インポート中の%sは�
   await importing;
   const result = await editing;
   if (operation === 'add') expect(result).toEqual({ added: 0, rejected: 1 });
-  else if (operation !== 'remove') expect(result).toBe(false);
+  else if (operation !== 'remove') expect(result).toEqual({ ok: false, reason: 'quadrant-limit' });
   expect(store.getState().chips).toEqual(operation === 'remove' ? [original] : [imported, original]);
 });

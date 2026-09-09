@@ -18,6 +18,12 @@ export async function commitText(text: string, notify: (message: string) => void
       autoClassified: true, createdAt: now, updatedAt: now,
     }] : [];
   }));
-  if (result.rejected && !result.added) notify(QUADRANT_LIMIT_MESSAGE);
-  else if (result.rejected || tokens.length > 50) notify('一部のみ登録しました。登録されなかった単語は、象限の空きを確認してもう一度入力してください。');
+  const truncated = tokens.length > 50;
+  if (result.rejected && !result.added) {
+    notify(truncated ? `先頭50件のみ処理しました。${QUADRANT_LIMIT_MESSAGE}` : QUADRANT_LIMIT_MESSAGE);
+  } else if (result.rejected || (truncated && result.added)) {
+    notify('一部のみ登録しました。登録されなかった単語は、もう一度入力してください。');
+  } else if (truncated) {
+    notify('先頭50件のみ処理しました。登録されなかった単語は、もう一度入力してください。');
+  }
 }

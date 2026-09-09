@@ -47,6 +47,7 @@ it('可搬設定だけを出力し、往復できる', () => {
   expect(exported.settings).not.toHaveProperty('installHintDismissed');
   expect(() => parseFullImport(JSON.stringify(exported))).not.toThrow();
   expect(parseFullImport(JSON.stringify(exported)).settings).toEqual(portableSettings);
+  for (const dict of fullExport(data()).dictionaries) expect(dict).not.toHaveProperty('label');
 });
 
 it('辞書エクスポートはラベルを除き、単語と版数を保って往復できる', () => {

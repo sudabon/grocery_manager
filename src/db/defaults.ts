@@ -10,9 +10,9 @@ export const defaultSettings: AppSettings = {
 };
 export function seedDictionaries(now = Date.now()): Dictionary[] {
   return [
-    { quadrant: 'q1', label: QUADRANT_LABELS.q1, entries: ['会議', '資料', 'メール', 'レビュー'], updatedAt: now },
-    { quadrant: 'q2', label: QUADRANT_LABELS.q2, entries: ['洗濯', '掃除', '料理', '保育園'], updatedAt: now },
-    { quadrant: 'q3', label: QUADRANT_LABELS.q3, entries: ['牛乳', '卵', 'パン', '洗剤'], updatedAt: now },
+    { quadrant: 'q1', label: QUADRANT_LABELS.q1, entries: [], updatedAt: now },
+    { quadrant: 'q2', label: QUADRANT_LABELS.q2, entries: ['にんじん', 'たまねぎ', 'キャベツ', 'じゃがいも'], updatedAt: now },
+    { quadrant: 'q3', label: QUADRANT_LABELS.q3, entries: ['牛乳', '卵', '鶏肉', 'チーズ'], updatedAt: now },
     { quadrant: 'q4', label: QUADRANT_LABELS.q4, entries: [], updatedAt: now },
   ];
 }

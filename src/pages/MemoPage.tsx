@@ -20,7 +20,12 @@ export function MemoPage() {
   const dismissSaveError = useAppStore((state) => state.dismissSaveError);
   const pendingWrites = useAppStore((state) => state.pendingWrites);
   const [bannerClosed, setBannerClosed] = useState(false);
-  const commit = useCallback((text: string) => commitText(text, toast.notify), [toast.notify]);
+  const commit = useCallback((text: string) => {
+    void commitText(text, toast.notify).catch((error: unknown) => {
+      console.error('[commit] メモを登録できませんでした', error);
+      toast.notify('登録できませんでした。もう一度お試しください。');
+    });
+  }, [toast.notify]);
   // 画像の組み立てから受け渡しまで await を挟まない。iOS はジェスチャが切れると共有シートを開かない
   // （design.md - D2）。共有は読み取りだけで、ストアにも IndexedDB にも書き込まない。
   const shareBoardImage = useCallback(() => {

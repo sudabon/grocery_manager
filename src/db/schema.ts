@@ -13,6 +13,8 @@ export interface MemoItem {
 }
 export interface Dictionary {
   quadrant: QuadrantId;
+  // 表示・エクスポートでは参照しない。唯一の出所は QUADRANT_LABELS（src/db/defaults.ts）。
+  // IndexedDB のバージョン上げと既存レコードの書き換えを避けるためフィールドだけ残している。
   label: string;
   entries: string[];
   updatedAt: number;

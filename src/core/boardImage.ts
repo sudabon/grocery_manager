@@ -45,8 +45,8 @@ function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, width:
   else ctx.rect(x, y, width, height);
   ctx.fill(); ctx.stroke();
 }
-// 描画不能なキャンバスに対し、ブラウザは例外ではなく "data:," を返すことがある（実測: Chromium は高さ 65,536px 以上でこの形）。
-// 検証しないと 0 バイトの PNG が「成功」として共有へ渡るため、プレフィクスと本文長の両方を見る。
+// 描画不能なキャンバスに対し、ブラウザは例外ではなく "data:," を返すことがある（上限はブラウザ・端末により異なる）。
+// 検証しないと 0 バイトの PNG が「成功」として共有へ渡るため、プレフィクスと、本文が空でないことを見る。
 // 描かれた中身が白紙かどうかまでは判定していない。
 const PNG_DATA_URL_PREFIX = 'data:image/png;base64,';
 function dataUrlToFile(dataUrl: string, name: string): File {

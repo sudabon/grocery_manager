@@ -10,6 +10,7 @@ import { repository, requestPersistence, type PersistencePermission, type Reposi
 import type { AppSettings, Dictionary, MemoItem } from '../db/schema';
 
 export type { MemoItem, QuadrantId };
+export type ChipOpResult = { ok: true } | { ok: false; reason: 'quadrant-limit' | 'not-found' };
 export interface AddChipsResult { added: number; rejected: number }
 export interface ChipItem extends MemoItem { unsaved?: boolean; highlighted?: boolean }
 interface AppStore {
@@ -26,8 +27,8 @@ interface AppStore {
   initialize: () => Promise<void>;
   dismissSaveError: () => void;
   addChips: (chips: MemoItem[]) => Promise<AddChipsResult>;
-  moveChip: (id: string, quadrant: QuadrantId) => Promise<boolean>;
-  editChip: (id: string, text: string) => Promise<boolean>;
+  moveChip: (id: string, quadrant: QuadrantId) => Promise<ChipOpResult>;
+  editChip: (id: string, text: string) => Promise<ChipOpResult>;
   removeChip: (id: string) => Promise<void>;
   clearAll: () => Promise<boolean>;
   saveDictionary: (quadrant: QuadrantId, rawText: string) => Promise<boolean>;
@@ -44,6 +45,11 @@ export function createAppStore(repo: Repository = repository, persist = requestP
   let initialization: Promise<void> | undefined;
   let writeQueue = Promise.resolve();
   let memoImport: Promise<boolean> | undefined;
+  // メモを伴うインポートの完了を待つ。待機中に次のインポートが始まると memoImport は別の
+  // Promise に差し替わる（importData の `if (memoImport === result)` ガードにより、先行分の
+  // finally は後発分を解除しない）。これを捕まえるため if ではなく while で再評価する。
+  // インポートが無いときは呼び出し側で await を省き、通常操作の即時状態更新を保つ。
+  async function awaitMemoImport() { while (memoImport) await memoImport; }
   const highlights = new Map<string, ReturnType<typeof setTimeout>>();
   return create<AppStore>((set, get) => {
     function save(operation: () => Promise<void>, ids: string[]) {
@@ -72,15 +78,14 @@ export function createAppStore(repo: Repository = repository, persist = requestP
     // the UI and a late failure would otherwise leave the screen disagreeing with the database.
     // `failureText: null` suppresses the notice while keeping the write queued and counted.
     // Use it for actions whose failure the user does not need to act on (see dismissInstallHint).
-    function apply(operation: () => Promise<void>, options: { failureText?: string | null } = {}): Promise<boolean> {
+    // `limitText` は QuadrantLimitError 専用の差し替え文言。未指定なら failureText に落ちるため、上限超過であることは利用者に伝わらない。
+    function apply(operation: () => Promise<void>, options: { failureText?: string | null; limitText?: string } = {}): Promise<boolean> {
       const failureText = options.failureText === undefined ? '保存できませんでした。変更は端末に保存されていません。' : options.failureText;
       set((state) => ({ pendingWrites: state.pendingWrites + 1 }));
       const result = writeQueue.then(async () => {
         try { await operation(); return true; }
         catch (error) {
-          const message = error instanceof QuadrantLimitError
-            ? 'インポートできませんでした。象限の100文字上限を超えています。データは変更されていません。'
-            : failureText;
+          const message = error instanceof QuadrantLimitError && options.limitText ? options.limitText : failureText;
           if (message) set((state) => ({ saveErrors: [...state.saveErrors, { text: message }] }));
           return false;
         }
@@ -128,7 +133,7 @@ export function createAppStore(repo: Repository = repository, persist = requestP
       })(),
       dismissSaveError: () => set((state) => ({ saveErrors: state.saveErrors.slice(1) })),
       addChips: async (incoming) => {
-        while (memoImport) await memoImport;
+        if (memoImport) await awaitMemoImport();
         const { settings } = get();
         const chips = [...get().chips];
         const added: MemoItem[] = [];
@@ -151,30 +156,34 @@ export function createAppStore(repo: Repository = repository, persist = requestP
         return { added: added.length, rejected };
       },
       moveChip: async (id, quadrant) => {
-        while (memoImport) await memoImport;
+        if (memoImport) await awaitMemoImport();
         const current = get().chips.find((chip) => chip.id === id);
-        if (!current || current.quadrant === quadrant) return true;
+        if (!current) return { ok: false, reason: 'not-found' };
+        if (current.quadrant === quadrant) return { ok: true };
         const moved = { ...current, quadrant, autoClassified: false, updatedAt: Date.now() };
         const chips = get().chips.map((chip) => chip.id === id ? moved : chip);
-        if (quadrantLength(chips, quadrant) > QUADRANT_TEXT_LIMIT) return false;
+        if (quadrantLength(chips, quadrant) > QUADRANT_TEXT_LIMIT) return { ok: false, reason: 'quadrant-limit' };
         set({ chips });
         await save(() => repo.putMemos([persisted(moved)]), [id]);
-        return true;
+        return { ok: true };
       },
       editChip: async (id, text) => {
-        while (memoImport) await memoImport;
-        if (!normalize(text)) { await get().removeChip(id); return true; }
+        if (memoImport) await awaitMemoImport();
+        if (!normalize(text)) { await get().removeChip(id); return { ok: true }; }
         const current = get().chips.find((chip) => chip.id === id);
-        if (!current) return true;
+        if (!current) return { ok: false, reason: 'not-found' };
         const edited = { ...current, rawText: text.trim(), normText: normalize(text), matchedEntry: null, autoClassified: false, updatedAt: Date.now() };
         const chips = get().chips.map((chip) => chip.id === id ? edited : chip);
-        if (quadrantLength(chips, current.quadrant) > QUADRANT_TEXT_LIMIT) return false;
+        const before = quadrantLength(get().chips, current.quadrant);
+        const after = quadrantLength(chips, current.quadrant);
+        // 旧データの超過を救済するため、超過状態でも本文が短くなる編集は通す。moveChip は必ず増加側なので同じ救済を持たない。
+        if (after > QUADRANT_TEXT_LIMIT && after > before) return { ok: false, reason: 'quadrant-limit' };
         set({ chips });
         await save(() => repo.putMemos([persisted(edited)]), [id]);
-        return true;
+        return { ok: true };
       },
       removeChip: async (id) => {
-        while (memoImport) await memoImport;
+        if (memoImport) await awaitMemoImport();
         set((state) => ({ chips: state.chips.filter((chip) => chip.id !== id) }));
         await save(() => repo.removeMemo(id), [id]);
       },
@@ -218,7 +227,10 @@ export function createAppStore(repo: Repository = repository, persist = requestP
               chips: [...state.chips, ...skipExistingMemos(data.memos, state.chips.map((chip) => chip.id))]
                 .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)) } : {}),
           }));
-        }, { failureText: 'インポートできませんでした。データは変更されていません。' });
+        }, {
+          failureText: 'インポートできませんでした。データは変更されていません。',
+          limitText: `インポートできませんでした。象限の${QUADRANT_TEXT_LIMIT}文字上限を超えています。データは変更されていません。`,
+        });
         if ('memos' in input) {
           memoImport = result;
           void result.finally(() => { if (memoImport === result) memoImport = undefined; });

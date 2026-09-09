@@ -93,7 +93,7 @@ test.describe('初回起動', () => {
   test.use({ classificationSeed: 'seed:fresh-storage' });
   test('保存データなしで起動すると初期ラベルが見えシード辞書で分類される', tags('TP-018'), async ({ memo }) => {
     for (const [id, label] of [[1, 'それ以外'], [2, '野菜'], [3, '肉類・乳製品'], [4, 'ドラッグストア']] as const) await expect(memo.quadrant(id)).toHaveAccessibleName(`Q${id} ${label}`);
-    await memo.start(); await memo.add('会議 牛乳'); await expect(memo.quadrantChips(1)).toHaveText(['会議']); await expect(memo.quadrantChips(3)).toHaveText(['牛乳']);
+    await memo.start(); await memo.add('にんじん 牛乳'); await expect(memo.quadrantChips(2)).toHaveText(['にんじん']); await expect(memo.quadrantChips(3)).toHaveText(['牛乳']);
   });
 });
 test('同一象限へ順に追加してリロードしても作成順が変わらない', tags('TP-020'), async ({ memo }) => {

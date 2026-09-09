@@ -5,6 +5,8 @@ specs/pwa-shell/spec.md の全 14 シナリオを、E2E で検証可能な観点
 
 前提:
 
+- ラベル表示は `update-quadmemo-fixed-labels` の固定値に従い、辞書編集では単語リストだけを変更する。
+
 - PWA 系の観点はビルド成果物を配信する preview サーバーに対して実行する（`pwa` プロジェクト）。開発サーバーでは Service Worker の事前キャッシュが本番と一致しないため検証にならない（design.md - D6）
 - `pwa` は iPhone 13 プリセットに `browserName: 'chromium'` を上書きして実行する。Safari 固有の Service Worker・オフライン動作は既存の iPhone 実機受け入れへ委譲する（design.md - D6）。既存 UI の `mobile-safari` 回帰検証は WebKit のまま維持する
 - Service Worker の登録完了は、アプリがオフライン利用可能になったことを表す状態で待つ（`waitForTimeout` は使わない）

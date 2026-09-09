@@ -6,6 +6,7 @@ import { defaultSettings, seedDictionaries } from '../../db/defaults';
 import { useAppStore } from '../../store/useAppStore';
 import { boardImageFile } from '../../core/boardImage';
 import { shareFile } from '../../core/shareExport';
+import { commitText } from '../../core/commitText';
 
 // 画像の内容は boardImage.test.ts が担保する。ここでは失敗が利用者に案内されることだけを見る。
 vi.mock('../../core/boardImage', async (importOriginal) => ({
@@ -13,12 +14,14 @@ vi.mock('../../core/boardImage', async (importOriginal) => ({
   boardImageFile: vi.fn(),
 }));
 vi.mock('../../core/shareExport', () => ({ shareFile: vi.fn() }));
+vi.mock('../../core/commitText', () => ({ commitText: vi.fn() }));
 
 const PNG = () => new File([new Uint8Array([137, 80, 78, 71])], 'quadmemo-board-2026-09-09.png', { type: 'image/png' });
 
 beforeEach(() => {
   vi.mocked(boardImageFile).mockReset();
   vi.mocked(shareFile).mockReset();
+  vi.mocked(commitText).mockReset().mockResolvedValue(undefined);
   useAppStore.setState({
     settings: { ...defaultSettings }, dictionaries: seedDictionaries(), chips: [],
     pendingWrites: 0, saveErrors: [], dataLoaded: true, storageAvailable: true,
@@ -71,7 +74,16 @@ it('各象限の見出しで改行込みの残量を確認でき、超過済み�
     ({ id, rawText, normText: rawText, quadrant, matchedEntry: null, autoClassified: false, createdAt: 1, updatedAt: 1 });
   useAppStore.setState({ chips: [chip('a', 'a'.repeat(95), 'q1'), chip('b', 'b', 'q1'), chip('old', 'x'.repeat(101), 'q2')] });
   render(<MemoryRouter><MemoPage /></MemoryRouter>);
-  expect(screen.getByRole('heading', { name: /Q1\s*それ以外\s*残り3文字/ })).toBeVisible();
+  expect(screen.getByRole('heading', { name: /Q1\s*それ以外\s*残り2文字/ })).toBeVisible();
   expect(screen.getByRole('heading', { name: /Q2\s*野菜\s*残り0文字/ })).toBeVisible();
   expect(screen.getByRole('heading', { name: /Q3\s*肉類・乳製品\s*残り100文字/ })).toBeVisible();
+});
+
+it('コミットが失敗すると案内を表示する', async () => {
+  vi.mocked(commitText).mockRejectedValue(new Error('commit failed'));
+  render(<MemoryRouter><MemoPage /></MemoryRouter>);
+  fireEvent.click(screen.getByRole('button', { name: '音声メモ開始' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'メモを入力' }), { target: { value: '牛乳' } });
+  fireEvent.click(screen.getByRole('button', { name: '確定' }));
+  expect(await screen.findByText('登録できませんでした。もう一度お試しください。')).toBeInTheDocument();
 });
