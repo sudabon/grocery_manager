@@ -24,11 +24,18 @@ export function MemoPage() {
   // 画像の組み立てから受け渡しまで await を挟まない。iOS はジェスチャが切れると共有シートを開かない
   // （design.md - D2）。共有は読み取りだけで、ストアにも IndexedDB にも書き込まない。
   const shareBoardImage = useCallback(() => {
-    const { dictionaries, chips } = useAppStore.getState();
+    const { chips } = useAppStore.getState();
     let file: File;
-    try { file = boardImageFile(boardImageLayout(dictionaries, chips), exportFileName('board')); }
-    catch { toast.notify('画像を作成できませんでした。もう一度お試しください。'); return; }
-    void shareFile(file).catch(() => toast.notify('画像を共有できませんでした。もう一度お試しください。'));
+    // 利用者向けの案内は汎用文でよいが、Canvas 非対応・書き出し失敗・共有失敗を実機で切り分けられるよう痕跡は残す。
+    try { file = boardImageFile(boardImageLayout(chips), exportFileName('board')); }
+    catch (error) {
+      console.error('[board-image] 画像を作成できませんでした', error);
+      toast.notify('画像を作成できませんでした。もう一度お試しください。'); return;
+    }
+    void shareFile(file).catch((error: unknown) => {
+      console.error('[board-image] 画像を共有できませんでした', error);
+      toast.notify('画像を共有できませんでした。もう一度お試しください。');
+    });
   }, [toast.notify]);
   return <main className="memo-page" aria-label="メモ">
     {!storageAvailable && !bannerClosed && <aside className="banner storage-banner" aria-label="保存できない環境の案内">
@@ -41,6 +48,6 @@ export function MemoPage() {
     <span className="visually-hidden">{pendingWrites ? '保存中' : '保存処理完了'}</span>
     <InputBar onCommit={commit} />
     <Toast message={saveError ?? toast.message} dismiss={saveError ? dismissSaveError : toast.dismiss} />
-    {selected && <ChipActionSheet id={selected} onClose={close} />}
+    {selected && <ChipActionSheet id={selected} onClose={close} notify={toast.notify} />}
   </main>;
 }

@@ -19,7 +19,7 @@ test-plan.md の「前提(fixture)」列に書いた fixture 名は、必ずこ�
 | `seed:settings-partial-match` | 基本辞書・部分一致ON | add-quadmemo-classification: TP-009〜010 | fixture 直接方式 |
 | `seed:settings-no-duplicates` | 基本辞書・重複OFF・Q1にapple 1件 | add-quadmemo-classification: TP-012 | fixture 直接方式 |
 | `seed:memos-across-quadrants` | 基本辞書・Q1 apple、Q2 ぱん、Q3 牛乳の3件 | add-quadmemo-classification: TP-016 | fixture 直接方式 |
-| `seed:dict-custom-labels` | ラベル: 企画・暮らし・食品・保留。基本エントリ・部分一致ON・自動確定3000ms・ヒントOFF | add-quadmemo-classification: TP-017, 019 | fixture 直接方式 |
+| `seed:dict-custom-labels` | 保存ラベルを企画・暮らし・食品・保留へ差し替えるが表示には使わない（固定ラベルの検証用）。基本エントリ・部分一致ON・自動確定3000ms・ヒントOFF | add-quadmemo-classification: TP-017, 019 / update-quadmemo-fixed-labels: TP-002, 008 | fixture 直接方式 |
 | `env:idb-write-failure` | 基本辞書をシードし読み取り専用 `__QUADMEMO_FAIL_WRITES__` フラグで更新処理を失敗させる（probe・ロードは成功） | add-quadmemo-classification: TP-021 | fixture 直接方式 |
 | `env:idb-blocked` | indexedDB 取得時に SecurityError を発生させる | add-quadmemo-classification: TP-022 | fixture 直接方式 |
 
@@ -51,7 +51,7 @@ fixture は各テストの前にべき等に状態を作り直し、テスト間
 |---|---|---|
 | `seed:dict-all-empty` | 初期ラベル・4 象限とも空エントリ・既定設定・メモ 0 件 | TP-009, TP-010 |
 | `env:no-web-share` | navigator.share / canShare を無効化（shareMode の既定値） | TP-021, TP-024, TP-028 |
-| `env:web-share-stub` | share / canShare をスタブし渡されたファイル名・内容を記録 | TP-029 |
+| `env:web-share-stub` | share / canShare をスタブし、渡されたファイルの name / type / size を記録（内容は JSON のときのみ） | TP-029 |
 | `seed:dict-basic`（再利用） | 基本辞書と既定設定 | TP-001〜006, TP-008, TP-011〜016, TP-019〜023, TP-028〜030 |
 | `seed:memos-across-quadrants`（再利用） | Q1 apple / Q2 ぱん / Q3 牛乳 | TP-007, TP-017〜018, TP-024〜027 |
 
@@ -65,17 +65,17 @@ fixture は各テストの前にべき等に状態を作り直し、テスト間
 
 ## ボード画像共有（add-quadmemo-board-image-share）
 
-`board-image-share.ts` は `memo-board.ts` を拡張し、`boardSeed` で状態、`shareMode` で共有環境を選ぶ。
-シードは `addInitScript` の upgrade で 1 回しか走らないため、`memo-board.ts` の投入 fixture を差し替える形で選択する。
+`board-image-share.ts` は `classification.ts` を拡張し、状態は `classificationSeed`、共有環境は `shareMode` で選ぶ。
+`memo` fixture（シード投入・遷移・ボード表示待ち）と `externalRequests` は `classification.ts` のものをそのまま継承する。
 オフライン観点は `board-image-share-pwa.ts`（`pwa.ts` に共有スタブを重ねたもの）で `pwa` プロジェクトから実行する。
 
 | fixture 名 | 作られる状態 | 使用する TP-ID |
 |---|---|---|
 | `env:web-share-abort` | `navigator.share` が受け渡しを記録したあと `AbortError` で拒否する（利用者による中止） | TP-005 |
 | `env:web-share-failure` | `navigator.share` が受け渡しを記録したあと AbortError 以外のエラーで失敗する | TP-007 |
-| `seed:empty-board`（再利用） | 初期ラベル・空エントリの4辞書、既定設定、メモ0件（`boardSeed` の既定値） | TP-001, TP-002 |
-| `seed:memos-across-quadrants`（再利用） | Q1 apple / Q2 ぱん / Q3 牛乳 | TP-003〜TP-007 |
-| `env:web-share-stub`（再利用） | share / canShare をスタブする。PNG は本文を読まず `name` と `type` を記録する（`shareMode` の既定値） | TP-002, TP-003, TP-005, TP-006, TP-008 |
+| `seed:dict-all-empty`（再利用） | 初期ラベル・4 象限とも空エントリ・既定設定・メモ 0 件（spec ファイル冒頭の `test.use` で指定） | TP-001, TP-002 |
+| `seed:memos-across-quadrants`（再利用） | Q1 apple / Q2 ぱん / Q3 牛乳 | TP-003〜TP-007, TP-009 |
+| `env:web-share-stub`（再利用） | share / canShare をスタブする。PNG は本文を読まず `name` / `type` / `size` を記録する（`shareMode` の既定値） | TP-002, TP-003, TP-006, TP-008, TP-009 |
 | `env:no-web-share`（再利用） | navigator.share / canShare を無効化しダウンロードへ固定 | TP-004 |
 | `env:built-app-offline`（再利用） | 下表の PWA fixture。共有スタブを重ねて切断状態から実行する | TP-008 |
 
@@ -97,3 +97,27 @@ Safari 固有の Service Worker・オフライン動作は iPhone 実機で確�
 
 `externalRequests` は自動 fixture として初回ナビゲーション前から context の要求を収集する。
 各テストは独立した context を使うため、キャッシュや IndexedDB を他テストから引き継がない。
+
+## 固定ラベル（update-quadmemo-fixed-labels）
+
+`dictionaries.ts` の Page Object と登録済み fixture を再利用する。
+
+| fixture | TP-ID |
+|---------|-------|
+| `seed:dict-basic` | TP-001, 003, 004, 005, 006, 007, 009, 010, 011 |
+| `seed:dict-custom-labels` | TP-002, 008（保存ラベルを変えたまま固定表示を検証） |
+| `env:web-share-stub` | TP-007 |
+| `files/dictionaries.json` | TP-008, 010（旧ラベルを含む正常 JSON） |
+| `files/broken.json` | TP-009 |
+
+## メモ文字数上限（add-quadmemo-memo-length-limit）
+
+| fixture | 作られる状態 | TP-ID |
+|---------|-------------|-------|
+| `seed:quadrant-at-limit` | 基本辞書、Q1 に100文字のメモ、Q2に「ぱん」。Q1 の残り0文字 | TP-002, 004, 005, 011 |
+| `seed:quadrant-near-limit` | 基本辞書、Q1 に95文字のメモ、Q2に「ぱん」。Q1 の残り5文字 | TP-001, 003, 006 |
+| `files/over-limit.json` | Q1 に101文字のメモ、変更される辞書・設定を含む全データ。原子的な拒否を確認 | TP-011 |
+| `seed:dict-basic`（再利用） | 基本辞書・既定設定・空ボード | TP-007, 008, 011 |
+| `seed:memos-across-quadrants`（再利用） | 基本辞書とQ1/Q2/Q3の3メモ | TP-009, 010, 012 |
+| `env:web-share-stub`（再利用） | JSON共有内容を記録し、拒否前後の全データ比較と復元に利用 | TP-011, 012 |
+| `files/all-data.json`（再利用） | ファイル自体は上限内。既存メモと統合すると超過するケース | TP-011 |

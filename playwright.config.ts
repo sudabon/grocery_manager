@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
-// ビルド成果物とオフラインを前提にする spec。pwa プロジェクトだけが実行する。
+// preview 配信のビルド成果物と Service Worker を前提にする spec。pwa プロジェクトだけが実行する。
 const pwaSpecs = ['**/add-quadmemo-pwa-offline.spec.ts', '**/add-quadmemo-board-image-share-offline.spec.ts'];
 
 export default defineConfig({

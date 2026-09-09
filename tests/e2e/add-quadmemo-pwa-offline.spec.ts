@@ -46,9 +46,9 @@ test('切断状態で追加・移動・編集・削除すると再読み込み�
   await expect(app.memo.chips).toHaveCount(1);
 });
 test('切断状態で辞書・設定へ遷移して編集すると再読み込み後も反映される', { tag: tag('TP-005') }, async ({ builtAppOffline: app }) => {
-  await app.dictionaries.open(); await app.dictionaries.label.fill('外出');
+  await app.dictionaries.open();
   await app.dictionaries.entries.fill('傘'); await app.dictionaries.save(); await app.dictionaries.reload();
-  await expect(app.dictionaries.label).toHaveValue('外出'); await expect(app.dictionaries.entries).toHaveValue('傘');
+  await expect(app.dictionaries.tab(1)).toHaveText('Q1 それ以外'); await expect(app.dictionaries.entries).toHaveValue('傘');
   await app.settings.open(); await app.settings.duplicates.uncheck(); await app.settings.saved(); await app.settings.reload();
   await expect(app.settings.duplicates).not.toBeChecked();
   await app.settings.back(); await app.memo.start(); await app.memo.add('傘'); await app.memo.waitForSave();
@@ -56,7 +56,7 @@ test('切断状態で辞書・設定へ遷移して編集すると再読み込�
 });
 test('切断して再表示しても4象限と文字が表示され外部ホストへ要求しない', { tag: tag('TP-006') }, async ({ builtAppOffline: app, externalRequests }) => {
   await app.memo.reload(); await app.memo.expectEqualQuadrants();
-  for (const [index, label] of ['仕事', '家庭', '買い物', 'その他'].entries()) {
+  for (const [index, label] of ['それ以外', '野菜', '肉類・乳製品', 'ドラッグストア'].entries()) {
     await expect(app.memo.quadrant(index + 1)).toBeVisible();
     await expect(app.memo.quadrant(index + 1)).toContainText(label);
   }

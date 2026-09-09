@@ -11,33 +11,33 @@ beforeEach(async () => {
   useAppStore.setState(useAppStore.getInitialState(), true);
   useAppStore.setState({ normalizedDicts: buildNormalizedDicts([]), settings: { ...defaultSettings } });
 });
-it('トークンをQ4へ追加し50件超過を通知する', () => {
-  const notify = vi.fn(); commitText(Array(51).fill('牛乳').join(' '), notify);
+it('トークンをQ4へ追加し50件超過を通知する', async () => {
+  const notify = vi.fn(); await commitText(Array(51).fill('卵').join(' '), notify);
   const chips = useAppStore.getState().chips;
   expect(chips).toHaveLength(50);
   expect(new Set(chips.map((chip) => chip.id)).size).toBe(50);
   expect(chips.every((chip) => chip.quadrant === 'q4' && chip.matchedEntry === null)).toBe(true);
   expect(notify).toHaveBeenCalledTimes(1);
 });
-it('0件は追加も通知もせず50件ちょうどは通知しない', () => {
-  const notify = vi.fn(); commitText('★ ！？', notify);
+it('0件は追加も通知もせず50件ちょうどは通知しない', async () => {
+  const notify = vi.fn(); await commitText('★ ！？', notify);
   expect(useAppStore.getState().chips).toHaveLength(0);
-  commitText(Array(50).fill('卵').join(' '), notify);
+  await commitText(Array(50).fill('卵').join(' '), notify);
   expect(useAppStore.getState().chips).toHaveLength(50);
   expect(notify).not.toHaveBeenCalled();
 });
-it('同一ミリ秒の50件はULIDが単調増加する', () => {
+it('同一ミリ秒の50件はULIDが単調増加する', async () => {
   vi.spyOn(Date, 'now').mockReturnValue(2000000000000);
-  commitText(Array(50).fill('語').join(' '), vi.fn());
+  await commitText(Array(50).fill('語').join(' '), vi.fn());
   const ids = useAppStore.getState().chips.map((chip) => chip.id);
   expect(ids).toHaveLength(50);
   expect(ids).toEqual([...ids].sort());
   expect(new Set(ids).size).toBe(50);
   for (const id of ids) expect(id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
 });
-it('ストアの辞書と部分一致設定を使って分類する', () => {
+it('ストアの辞書と部分一致設定を使って分類する', async () => {
   useAppStore.setState({ normalizedDicts: buildNormalizedDicts([{ quadrant: 'q1', entries: ['牛乳'] }]) });
-  commitText('牛乳 みかん', vi.fn());
+  await commitText('牛乳 みかん', vi.fn());
   expect(useAppStore.getState().chips).toMatchObject([
     { rawText: '牛乳', quadrant: 'q1', matchedEntry: '牛乳' },
     { rawText: 'みかん', quadrant: 'q4', matchedEntry: null },
@@ -46,11 +46,27 @@ it('ストアの辞書と部分一致設定を使って分類する', () => {
 it.each([
   [false, 'q4', null],
   [true, 'q1', 'apple'],
-])('部分一致=%s の設定を尊重して包含だけの語の配置を決める', (partialMatch, quadrant, matchedEntry) => {
+])('部分一致=%s の設定を尊重して包含だけの語の配置を決める', async (partialMatch, quadrant, matchedEntry) => {
   useAppStore.setState({
     normalizedDicts: buildNormalizedDicts([{ quadrant: 'q1', entries: ['apple'] }]),
     settings: { ...defaultSettings, partialMatch },
   });
-  commitText('apples', vi.fn());
+  await commitText('apples', vi.fn());
   expect(useAppStore.getState().chips).toMatchObject([{ rawText: 'apples', quadrant, matchedEntry }]);
+});
+
+it('先頭50件を先に選び、容量不足でも51件目を繰り上げない', async () => {
+  useAppStore.setState({ normalizedDicts: buildNormalizedDicts([{ quadrant: 'q1', entries: ['牛乳'] }, { quadrant: 'q2', entries: ['卵'] }]) });
+  const notify = vi.fn();
+  await commitText([...Array(50).fill('牛乳'), '卵'].join(' '), notify);
+  expect(useAppStore.getState().chips).toHaveLength(33);
+  expect(useAppStore.getState().chips.every(({ quadrant }) => quadrant === 'q1')).toBe(true);
+  expect(notify).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('一部のみ登録'));
+});
+it('1件も容量に収まらなければ上限の通知を出す', async () => {
+  const notify = vi.fn();
+  await commitText('a'.repeat(100), notify);
+  await commitText('b', notify);
+  expect(useAppStore.getState().chips).toHaveLength(1);
+  expect(notify).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('100文字上限'));
 });

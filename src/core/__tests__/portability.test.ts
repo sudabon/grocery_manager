@@ -48,3 +48,27 @@ it('可搬設定だけを出力し、往復できる', () => {
   expect(() => parseFullImport(JSON.stringify(exported))).not.toThrow();
   expect(parseFullImport(JSON.stringify(exported)).settings).toEqual(portableSettings);
 });
+
+it('辞書エクスポートはラベルを除き、単語と版数を保って往復できる', () => {
+  const legacy = seedDictionaries(1).map((dict) => ({ ...dict, label: '古いラベル' }));
+  const exported = dictionaryExport(legacy);
+  expect(exported.version).toBe(1);
+  expect(exported.dictionaries).toHaveLength(4);
+  for (const dict of exported.dictionaries) expect(dict).not.toHaveProperty('label');
+  expect(parseDictionaryImport(JSON.stringify(exported))).toEqual(seedDictionaries(1));
+  expect(legacy.every((dict) => dict.label === '古いラベル')).toBe(true);
+});
+it('旧 JSON のラベルを取り込まず固定値で復元する', () => {
+  const legacy = data();
+  legacy.dictionaries = legacy.dictionaries.map((dict) => ({ ...dict, label: '古いラベル' }));
+  expect(parseDictionaryImport(JSON.stringify({ version: 1, dictionaries: legacy.dictionaries }))).toEqual(data().dictionaries);
+  expect(parseFullImport(JSON.stringify(fullExport(legacy)))).toEqual(data());
+});
+it.each([null, false, 123, [], {}])('省略可能な label も存在する場合は文字列型を検証する: %j', (label) => {
+  const input = { version: 1, dictionaries: seedDictionaries(1).map((dict) => ({ ...dict, label })) };
+  expect(() => parseDictionaryImport(JSON.stringify(input))).toThrow(ImportFormatError);
+});
+it('全データインポートでもラベル省略を受け付ける', () => {
+  const input = { ...fullExport(data()), dictionaries: dictionaryExport(data().dictionaries).dictionaries };
+  expect(parseFullImport(JSON.stringify(input))).toEqual(data());
+});

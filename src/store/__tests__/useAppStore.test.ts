@@ -125,14 +125,15 @@ it('重複OFFは正規化して同象限と一括入力内で抑止し一時強�
 it('辞書保存は成功後だけキャッシュを更新し既存メモは変更しない', async () => {
   await store.getState().initialize(); await store.getState().addChips([chip('a')]);
   const before = store.getState().chips;
-  expect(await store.getState().saveDictionary('q1', '企画', 'パン\nぱん')).toBe(true);
-  expect(store.getState().dictionaries[0]).toMatchObject({ label: '企画', entries: ['パン'] });
+  expect(await store.getState().saveDictionary('q1', 'パン\nぱん')).toBe(true);
+  expect(store.getState().dictionaries[0]).toMatchObject({ label: 'それ以外', entries: ['パン'] });
   expect(store.getState().normalizedDicts.exact.get('ぱん')?.[0].quadrant).toBe('q1');
   expect(store.getState().chips).toEqual(before);
   expect(repo.putMemos).toHaveBeenCalledTimes(1);
+  const savedDictionary = store.getState().dictionaries[0];
   vi.mocked(repo.saveDictionary).mockRejectedValueOnce(new Error('quota'));
-  expect(await store.getState().saveDictionary('q1', '失敗', '失敗')).toBe(false);
-  expect(store.getState().dictionaries[0].label).toBe('企画'); expect(store.getState().saveErrors).toHaveLength(1);
+  expect(await store.getState().saveDictionary('q1', '失敗')).toBe(false);
+  expect(store.getState().dictionaries[0]).toEqual(savedDictionary); expect(store.getState().saveErrors).toHaveLength(1);
 });
 it('設定の連続保存で他の設定を失わず失敗時は保存済みの値を維持する', async () => {
   await Promise.all([store.getState().updateSettings({ partialMatch: true }), store.getState().updateSettings({ autoCommitMs: 9000 })]);
@@ -161,7 +162,7 @@ it('インポート成功で辞書キャッシュと設定を置き換え既存I
 it.each([
   ['clearAll', 'clearMemos', () => store.getState().clearAll(), 'メモを削除できませんでした。メモは削除されていません。'],
   ['importData', 'applyImport', () => store.getState().importData({ dictionaries: seedDictionaries(1) }), 'インポートできませんでした。データは変更されていません。'],
-  ['saveDictionary', 'saveDictionary', () => store.getState().saveDictionary('q1', '企画', 'パン'), '保存できませんでした。変更は端末に保存されていません。'],
+  ['saveDictionary', 'saveDictionary', () => store.getState().saveDictionary('q1', 'パン'), '保存できませんでした。変更は端末に保存されていません。'],
   ['updateSettings', 'saveSettings', () => store.getState().updateSettings({ partialMatch: true }), '保存できませんでした。変更は端末に保存されていません。'],
 ] as const)('%s の失敗は操作に対応した文言で通知する', async (_name, method, run, text) => {
   vi.mocked(repo[method]).mockRejectedValueOnce(new Error('quota'));
@@ -175,4 +176,85 @@ it('インポート失敗でメモ・辞書・設定・キャッシュを変更�
   expect(await store.getState().importData({ dictionaries: seedDictionaries(2), memos: [chip('a')], settings: { ...defaultSettings, partialMatch: true } })).toBe(false);
   expect(store.getState()).toMatchObject({ chips: before.chips, dictionaries: before.dictionaries, settings: before.settings, normalizedDicts: before.normalizedDicts });
   expect(store.getState().saveErrors).toHaveLength(1);
+});
+
+it('追加は改行込み100文字までを登録し、拒否後も他の象限と短いチップを処理する', async () => {
+  store.setState({ chips: [{ ...chip('existing'), rawText: 'a'.repeat(96) }] });
+  const result = await store.getState().addChips([
+    { ...chip('long'), rawText: 'long' }, { ...chip('fits'), rawText: 'abc' },
+    { ...chip('full'), rawText: 'x' }, { ...chip('other'), quadrant: 'q1' },
+  ]);
+  expect(result).toEqual({ added: 2, rejected: 2 });
+  expect(store.getState().chips.map(({ id }) => id)).toEqual(['existing', 'fits', 'other']);
+  expect(vi.mocked(repo.putMemos).mock.calls[0][0].map(({ id }) => id)).toEqual(['fits', 'other']);
+});
+it('連続追加は保存待ちのチップも数え、上限超過を一切書き込まない', async () => {
+  const first = store.getState().addChips([{ ...chip('a'), rawText: 'a'.repeat(100) }]);
+  const second = store.getState().addChips([chip('b')]);
+  expect(await second).toEqual({ added: 0, rejected: 1 });
+  await first;
+  expect(repo.putMemos).toHaveBeenCalledTimes(1);
+  expect(store.getState().chips).toHaveLength(1);
+});
+it('上限に達していても重複OFFの強調は容量拒否として数えない', async () => {
+  const text = 'a'.repeat(100);
+  store.setState({ chips: [{ ...chip('a'), rawText: text, normText: text }], settings: { ...defaultSettings, allowDuplicates: false } });
+  expect(await store.getState().addChips([{ ...chip('b'), rawText: text }])).toEqual({ added: 0, rejected: 0 });
+  expect(store.getState().chips[0].highlighted).toBe(true);
+  expect(repo.putMemos).not.toHaveBeenCalled();
+});
+it('編集は元の本文を置き換えて数え、超過時は本文・分類・時刻も変えない', async () => {
+  store.setState({ chips: [{ ...chip('a'), rawText: 'a'.repeat(97) }, { ...chip('b'), rawText: 'b' }] });
+  expect(await store.getState().editChip('b', ' xy ')).toBe(true);
+  const before = store.getState().chips;
+  expect(before[1].rawText).toBe('xy');
+  expect(await store.getState().editChip('b', 'xyz')).toBe(false);
+  expect(store.getState().chips).toEqual(before);
+  expect(repo.putMemos).toHaveBeenCalledTimes(1);
+});
+it('移動先は改行込み100文字まで許可し、超過時は元の象限に留める', async () => {
+  store.setState({ chips: [{ ...chip('target'), quadrant: 'q1', rawText: 'a'.repeat(98) },
+    { ...chip('a'), rawText: 'b' }, { ...chip('b'), rawText: 'c' }] });
+  expect(await store.getState().moveChip('a', 'q1')).toBe(true);
+  const before = store.getState().chips;
+  expect(await store.getState().moveChip('b', 'q1')).toBe(false);
+  expect(store.getState().chips).toEqual(before);
+  expect(repo.putMemos).toHaveBeenCalledTimes(1);
+});
+it('旧データの超過は自動切り詰めせず、上限内への編集と空白編集による削除を許可する', async () => {
+  vi.mocked(repo.getMemos).mockResolvedValue([{ ...chip('old'), rawText: 'a'.repeat(200) }]);
+  await store.getState().initialize();
+  expect(store.getState().chips[0].rawText).toHaveLength(200);
+  expect(await store.getState().editChip('old', 'a'.repeat(150))).toBe(false);
+  expect(await store.getState().editChip('old', 'a'.repeat(100))).toBe(true);
+  expect(await store.getState().editChip('old', '   ')).toBe(true);
+  expect(store.getState().chips).toEqual([]);
+});
+it('インポートは既存の未保存メモも合算し、超過なら辞書・設定・メモを無変更にする', async () => {
+  store.setState({ chips: [{ ...chip('a'), rawText: 'a'.repeat(98), unsaved: true }] });
+  const before = store.getState();
+  expect(await store.getState().importData({ dictionaries: seedDictionaries(), memos: [chip('new')], settings: defaultSettings })).toBe(false);
+  expect(repo.applyImport).not.toHaveBeenCalled();
+  expect(store.getState()).toMatchObject({ chips: before.chips, dictionaries: before.dictionaries, settings: before.settings });
+  expect(store.getState().saveErrors[0].text).toContain('100文字上限');
+});
+it.each(['add', 'edit', 'move', 'remove'] as const)('インポート中の%sは完了後の容量と最新メモを使う', async (operation) => {
+  const original = { ...chip('original'), rawText: 'a', quadrant: 'q1' as const };
+  store.setState({ chips: [original] });
+  const imported = { ...chip('imported'), rawText: 'b'.repeat(operation === 'edit' ? 98 : 100), quadrant: operation === 'edit' ? 'q1' as const : 'q4' as const };
+  let finish!: (value: Awaited<ReturnType<Repository['applyImport']>>) => void;
+  vi.mocked(repo.applyImport).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  const importing = store.getState().importData({ dictionaries: seedDictionaries(), memos: [imported], settings: defaultSettings });
+  await Promise.resolve();
+  const editing = operation === 'add' ? store.getState().addChips([chip('new')])
+    : operation === 'edit' ? store.getState().editChip('original', 'aa')
+    : operation === 'move' ? store.getState().moveChip('original', 'q4')
+    : store.getState().removeChip('imported');
+  expect(repo.putMemos).not.toHaveBeenCalled(); expect(repo.removeMemo).not.toHaveBeenCalled();
+  finish({ dictionaries: seedDictionaries(), memos: [imported], settings: defaultSettings });
+  await importing;
+  const result = await editing;
+  if (operation === 'add') expect(result).toEqual({ added: 0, rejected: 1 });
+  else if (operation !== 'remove') expect(result).toBe(false);
+  expect(store.getState().chips).toEqual(operation === 'remove' ? [original] : [imported, original]);
 });

@@ -2,10 +2,10 @@ import { readFile } from 'node:fs/promises';
 import { test as base, expect } from './classification';
 import { DictionariesPage } from '../pages/DictionariesPage';
 import { SettingsPage } from '../pages/SettingsPage';
-import { configureShare, sharedFiles } from '../mocks/web-share';
+import { configureShare, sharedFiles, type ShareMode } from '../mocks/web-share';
 import type { Download } from '@playwright/test';
 export const test = base.extend<{
-  shareMode: 'env:no-web-share' | 'env:web-share-stub'; shareEnvironment: void;
+  shareMode: ShareMode; shareEnvironment: void;
   dictionaries: DictionariesPage; settingsPage: SettingsPage; readSharedFiles: () => ReturnType<typeof sharedFiles>;
 }>({
   shareMode: ['env:no-web-share', { option: true }],

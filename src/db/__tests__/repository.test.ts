@@ -75,7 +75,7 @@ it('一括書き込みの途中で失敗しても部分保存しない', async (
 it('初期データ投入と辞書・設定の更新は独立し上書きしない', async () => {
   await repo.seed();
   const dictionaries = await repo.getDictionaries();
-  expect(dictionaries.map((dict) => dict.label)).toEqual(['仕事', '家庭', '買い物', 'その他']);
+  expect(dictionaries.map((dict) => dict.label)).toEqual(['それ以外', '野菜', '肉類・乳製品', 'ドラッグストア']);
   expect(dictionaries[0].entries).toContain('会議');
   expect(await repo.getSettings()).toEqual(defaultSettings);
   const custom = { ...dictionaries[0], label: '独自', entries: ['custom'] };
@@ -83,9 +83,11 @@ it('初期データ投入と辞書・設定の更新は独立し上書きしな�
   await repo.saveSettings({ ...defaultSettings, partialMatch: true, allowDuplicates: false });
   await repo.seed();
   expect((await repo.getDictionaries())[0]).toEqual(custom);
+  expect(await db.get('dictionaries', 'q1')).toHaveProperty('label', '独自');
   expect(await repo.getSettings()).toMatchObject({ partialMatch: true, allowDuplicates: false });
   await db.clear('settings'); await repo.seed();
   expect((await repo.getDictionaries())[0]).toEqual(custom);
+  expect(await db.get('dictionaries', 'q1')).toHaveProperty('label', '独自');
   expect(await repo.getSettings()).toEqual(defaultSettings);
   await repo.saveSettings({ ...defaultSettings, autoCommitMs: 3000 });
   await db.clear('dictionaries'); await repo.seed();
@@ -139,9 +141,9 @@ it('全データの一括取得とID衝突をスキップする一括適用', as
   await repo.applyImport(input);
   expect((await repo.getAllData()).memos).toEqual([memo('a'), memo('b')]);
   expect(await repo.getSettings()).toMatchObject({ partialMatch: true });
-  expect((await repo.getDictionaries())[0].label).toBe('新ラベル');
+  expect((await repo.getDictionaries())[0].label).toBe('それ以外');
   await repo.clearMemos();
-  expect(await repo.getDictionaries()).toEqual(input.dictionaries);
+  expect(await repo.getDictionaries()).toEqual(before.dictionaries);
   expect(await repo.getSettings()).toEqual(input.settings);
 });
 it('インポート検証失敗とトランザクション途中の失敗は全ストア無変更', async () => {
@@ -161,4 +163,28 @@ it('辞書のみのインポートはメモと設定へ書き込まない', asyn
   const before = await repo.getAllData();
   await repo.applyImport({ dictionaries: before.dictionaries.map((d) => ({ ...d, entries: [] })) });
   expect(await repo.getMemos()).toEqual(before.memos); expect(await repo.getSettings()).toEqual(before.settings);
+});
+
+it.each([0, 60])('インポートは既存%d文字との統合後に100文字を超えると全ストア無変更', async (length) => {
+  await repo.seed();
+  if (length) await repo.putMemos([{ ...memo('existing'), rawText: 'a'.repeat(length) }]);
+  const before = await repo.getAllData();
+  const incoming = { ...before, memos: [{ ...memo('incoming'), rawText: 'b'.repeat(length ? 40 : 101) }],
+    settings: { ...defaultSettings, partialMatch: true }, dictionaries: before.dictionaries.map((dict) => ({ ...dict, entries: ['changed'] })) };
+  await expect(repo.applyImport(incoming)).rejects.toThrow('100文字上限');
+  expect(await repo.getAllData()).toEqual(before);
+});
+it('インポートはID衝突と入力内重複を数えず統合後ちょうど100文字を許可する', async () => {
+  await repo.seed();
+  const existing = { ...memo('existing'), rawText: 'a'.repeat(98) };
+  await repo.putMemos([existing]);
+  const incoming = { ...memo('new'), rawText: 'b' };
+  await repo.applyImport({ ...(await repo.getAllData()), memos: [{ ...existing, rawText: 'x'.repeat(500) }, incoming, incoming] });
+  expect(await repo.getMemos()).toEqual([existing, incoming]);
+});
+it('同時インポートもトランザクション内で最新の既存メモを数える', async () => {
+  await repo.seed(); const before = await repo.getAllData();
+  const results = await Promise.allSettled(['a', 'b'].map((id) => repo.applyImport({ ...before, memos: [{ ...memo(id), rawText: id.repeat(60) }] })));
+  expect(results.map(({ status }) => status).sort()).toEqual(['fulfilled', 'rejected']);
+  expect(await repo.getMemos()).toHaveLength(1);
 });

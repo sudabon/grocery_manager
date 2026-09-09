@@ -3,12 +3,14 @@ import { buildNormalizedDicts, type NormalizedDicts, type QuadrantId } from '../
 import { sanitizeEntries } from '../core/dictEntries';
 import { clampAutoCommitMs } from '../core/settings';
 import { skipExistingMemos, type AppData } from '../core/portability';
+import { assertQuadrantLimit, quadrantLength, QUADRANT_TEXT_LIMIT, QuadrantLimitError } from '../core/quadrantLength';
 import { normalize } from '../core/normalize';
-import { defaultSettings, seedDictionaries } from '../db/defaults';
+import { defaultSettings, QUADRANT_LABELS, seedDictionaries } from '../db/defaults';
 import { repository, requestPersistence, type PersistencePermission, type Repository } from '../db/repository';
 import type { AppSettings, Dictionary, MemoItem } from '../db/schema';
 
 export type { MemoItem, QuadrantId };
+export interface AddChipsResult { added: number; rejected: number }
 export interface ChipItem extends MemoItem { unsaved?: boolean; highlighted?: boolean }
 interface AppStore {
   chips: ChipItem[];
@@ -23,12 +25,12 @@ interface AppStore {
   pendingWrites: number;
   initialize: () => Promise<void>;
   dismissSaveError: () => void;
-  addChips: (chips: MemoItem[]) => Promise<void>;
-  moveChip: (id: string, quadrant: QuadrantId) => Promise<void>;
-  editChip: (id: string, text: string) => Promise<void>;
+  addChips: (chips: MemoItem[]) => Promise<AddChipsResult>;
+  moveChip: (id: string, quadrant: QuadrantId) => Promise<boolean>;
+  editChip: (id: string, text: string) => Promise<boolean>;
   removeChip: (id: string) => Promise<void>;
   clearAll: () => Promise<boolean>;
-  saveDictionary: (quadrant: QuadrantId, label: string, rawText: string) => Promise<boolean>;
+  saveDictionary: (quadrant: QuadrantId, rawText: string) => Promise<boolean>;
   updateSettings: (patch: Partial<Omit<AppSettings, 'key' | 'installHintDismissed'>>) => Promise<boolean>;
   dismissInstallHint: () => Promise<void>;
   importData: (data: AppData | { dictionaries: Dictionary[] }) => Promise<boolean>;
@@ -41,6 +43,7 @@ function persisted(chip: ChipItem): MemoItem {
 export function createAppStore(repo: Repository = repository, persist = requestPersistence) {
   let initialization: Promise<void> | undefined;
   let writeQueue = Promise.resolve();
+  let memoImport: Promise<boolean> | undefined;
   const highlights = new Map<string, ReturnType<typeof setTimeout>>();
   return create<AppStore>((set, get) => {
     function save(operation: () => Promise<void>, ids: string[]) {
@@ -74,8 +77,11 @@ export function createAppStore(repo: Repository = repository, persist = requestP
       set((state) => ({ pendingWrites: state.pendingWrites + 1 }));
       const result = writeQueue.then(async () => {
         try { await operation(); return true; }
-        catch {
-          if (failureText) set((state) => ({ saveErrors: [...state.saveErrors, { text: failureText }] }));
+        catch (error) {
+          const message = error instanceof QuadrantLimitError
+            ? 'インポートできませんでした。象限の100文字上限を超えています。データは変更されていません。'
+            : failureText;
+          if (message) set((state) => ({ saveErrors: [...state.saveErrors, { text: message }] }));
           return false;
         }
       }).finally(() => set((state) => ({ pendingWrites: state.pendingWrites - 1 })));
@@ -121,10 +127,12 @@ export function createAppStore(repo: Repository = repository, persist = requestP
         set({ ready: true, storageAvailable });
       })(),
       dismissSaveError: () => set((state) => ({ saveErrors: state.saveErrors.slice(1) })),
-      addChips: (incoming) => {
+      addChips: async (incoming) => {
+        while (memoImport) await memoImport;
         const { settings } = get();
         const chips = [...get().chips];
         const added: MemoItem[] = [];
+        let rejected = 0;
         for (const item of incoming) {
           const normText = normalize(item.rawText);
           if (!normText) continue;
@@ -134,37 +142,48 @@ export function createAppStore(repo: Repository = repository, persist = requestP
             highlight(chips[existing].id);
           } else {
             const chip = persisted({ ...item, normText });
+            if (quadrantLength([...chips, chip], chip.quadrant) > QUADRANT_TEXT_LIMIT) { rejected++; continue; }
             chips.push(chip); added.push(chip);
           }
         }
         set({ chips });
-        return added.length ? save(() => repo.putMemos(added), added.map((chip) => chip.id)) : Promise.resolve();
+        if (added.length) await save(() => repo.putMemos(added), added.map((chip) => chip.id));
+        return { added: added.length, rejected };
       },
-      moveChip: (id, quadrant) => {
+      moveChip: async (id, quadrant) => {
+        while (memoImport) await memoImport;
         const current = get().chips.find((chip) => chip.id === id);
-        if (!current) return Promise.resolve();
+        if (!current || current.quadrant === quadrant) return true;
         const moved = { ...current, quadrant, autoClassified: false, updatedAt: Date.now() };
-        set((state) => ({ chips: state.chips.map((chip) => chip.id === id ? moved : chip) }));
-        return save(() => repo.putMemos([persisted(moved)]), [id]);
+        const chips = get().chips.map((chip) => chip.id === id ? moved : chip);
+        if (quadrantLength(chips, quadrant) > QUADRANT_TEXT_LIMIT) return false;
+        set({ chips });
+        await save(() => repo.putMemos([persisted(moved)]), [id]);
+        return true;
       },
-      editChip: (id, text) => {
-        if (!normalize(text)) return get().removeChip(id);
+      editChip: async (id, text) => {
+        while (memoImport) await memoImport;
+        if (!normalize(text)) { await get().removeChip(id); return true; }
         const current = get().chips.find((chip) => chip.id === id);
-        if (!current) return Promise.resolve();
+        if (!current) return true;
         const edited = { ...current, rawText: text.trim(), normText: normalize(text), matchedEntry: null, autoClassified: false, updatedAt: Date.now() };
-        set((state) => ({ chips: state.chips.map((chip) => chip.id === id ? edited : chip) }));
-        return save(() => repo.putMemos([persisted(edited)]), [id]);
+        const chips = get().chips.map((chip) => chip.id === id ? edited : chip);
+        if (quadrantLength(chips, current.quadrant) > QUADRANT_TEXT_LIMIT) return false;
+        set({ chips });
+        await save(() => repo.putMemos([persisted(edited)]), [id]);
+        return true;
       },
-      removeChip: (id) => {
+      removeChip: async (id) => {
+        while (memoImport) await memoImport;
         set((state) => ({ chips: state.chips.filter((chip) => chip.id !== id) }));
-        return save(() => repo.removeMemo(id), [id]);
+        await save(() => repo.removeMemo(id), [id]);
       },
       clearAll: () => apply(async () => {
         await repo.clearMemos();
         set({ chips: [] });
       }, { failureText: 'メモを削除できませんでした。メモは削除されていません。' }),
-      saveDictionary: (quadrant, label, rawText) => apply(async () => {
-        const dictionary = { quadrant, label: label.trim(), entries: sanitizeEntries(rawText), updatedAt: Date.now() };
+      saveDictionary: (quadrant, rawText) => apply(async () => {
+        const dictionary = { quadrant, label: QUADRANT_LABELS[quadrant], entries: sanitizeEntries(rawText), updatedAt: Date.now() };
         await repo.saveDictionary(dictionary);
         const dictionaries = get().dictionaries.map((d) => d.quadrant === quadrant ? dictionary : d);
         set({ dictionaries, normalizedDicts: buildNormalizedDicts(dictionaries) });
@@ -186,14 +205,26 @@ export function createAppStore(repo: Repository = repository, persist = requestP
           }
         }, { failureText: null });
       },
-      importData: (input) => apply(async () => {
-        const data = await repo.applyImport(input);
-        set((state) => ({ dictionaries: data.dictionaries, normalizedDicts: buildNormalizedDicts(data.dictionaries),
-          ...(data.settings ? { settings: data.settings,
-            chips: [...state.chips, ...skipExistingMemos(data.memos, state.chips.map((chip) => chip.id))]
-              .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)) } : {}),
-        }));
-      }, { failureText: 'インポートできませんでした。データは変更されていません。' }),
+      importData: (input) => {
+        const result = apply(async () => {
+          if ('memos' in input) {
+            const chips = get().chips;
+            // 保存失敗で画面にだけ残るメモも容量に含める。保存層では別途、実データを同一 tx 内で確認する。
+            assertQuadrantLimit([...chips, ...skipExistingMemos(input.memos, chips.map((chip) => chip.id))]);
+          }
+          const data = await repo.applyImport(input);
+          set((state) => ({ dictionaries: data.dictionaries, normalizedDicts: buildNormalizedDicts(data.dictionaries),
+            ...(data.settings ? { settings: data.settings,
+              chips: [...state.chips, ...skipExistingMemos(data.memos, state.chips.map((chip) => chip.id))]
+                .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)) } : {}),
+          }));
+        }, { failureText: 'インポートできませんでした。データは変更されていません。' });
+        if ('memos' in input) {
+          memoImport = result;
+          void result.finally(() => { if (memoImport === result) memoImport = undefined; });
+        }
+        return result;
+      },
     };
   });
 }

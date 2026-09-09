@@ -1,3 +1,4 @@
+import { QUADRANT_LABELS } from '../db/defaults';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { QUADRANT_ORDER, type QuadrantId } from '../core/classify';
@@ -12,21 +13,21 @@ export function DictionariesPage() {
   const storageAvailable = useAppStore((state) => state.storageAvailable);
   const dataLoaded = useAppStore((state) => state.dataLoaded);
   const [selected, setSelected] = useState<QuadrantId>('q1');
-  const [drafts, setDrafts] = useState(() => Object.fromEntries(dictionaries.map((d) => [d.quadrant, { label: d.label, text: d.entries.join('\n') }])));
+  const [drafts, setDrafts] = useState(() => Object.fromEntries(dictionaries.map((d) => [d.quadrant, d.entries.join('\n')])));
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const toast = useToast();
   const draft = drafts[selected];
   const saved = dictionaries.find((d) => d.quadrant === selected)!;
-  const dirty = draft.label !== saved.label || draft.text !== saved.entries.join('\n');
-  const change = (patch: Partial<typeof draft>) => setDrafts((values) => ({ ...values, [selected]: { ...values[selected], ...patch } }));
+  const dirty = draft !== saved.entries.join('\n');
+  const change = (text: string) => setDrafts((values) => ({ ...values, [selected]: text }));
   async function save() {
     if (lock.current) return;
     lock.current = true; setBusy(true);
     try {
-      if (await useAppStore.getState().saveDictionary(selected, draft.label, draft.text)) {
+      if (await useAppStore.getState().saveDictionary(selected, draft)) {
         const updated = useAppStore.getState().dictionaries.find((d) => d.quadrant === selected)!;
-        setDrafts((values) => ({ ...values, [selected]: { label: updated.label, text: updated.entries.join('\n') } }));
+        setDrafts((values) => ({ ...values, [selected]: updated.entries.join('\n') }));
         toast.notify('辞書を保存しました');
       }
     } finally { lock.current = false; setBusy(false); }
@@ -37,7 +38,7 @@ export function DictionariesPage() {
     try {
       const dictionaries = parseDictionaryImport(await file.text());
       if (await useAppStore.getState().importData({ dictionaries })) {
-        setDrafts(Object.fromEntries(dictionaries.map((d) => [d.quadrant, { label: d.label, text: d.entries.join('\n') }])));
+        setDrafts(Object.fromEntries(dictionaries.map((d) => [d.quadrant, d.entries.join('\n')])));
         toast.notify('辞書をインポートしました');
       }
     } catch (error) {
@@ -49,7 +50,7 @@ export function DictionariesPage() {
   }
   return <main className="secondary-page"><div className="page-content">
     <Link to="/">メモ画面へ戻る</Link><h2>辞書編集</h2>
-    <p>象限ごとのラベルと単語を編集し、保存して反映します。</p>
+    <p>象限ごとの単語を編集し、保存して反映します。</p>
     <div role="tablist" aria-label="編集する象限" className="quadrant-tabs">{QUADRANT_ORDER.map((q, index) =>
       <button key={q} type="button" role="tab" id={`tab-${q}`} aria-controls="dictionary-panel" aria-selected={selected === q}
         tabIndex={selected === q ? 0 : -1} disabled={busy} onClick={() => setSelected(q)} onKeyDown={(event) => {
@@ -57,13 +58,11 @@ export function DictionariesPage() {
           event.preventDefault();
           const next = event.key === 'Home' ? 0 : event.key === 'End' ? 3 : (index + (event.key === 'ArrowRight' ? 1 : 3)) % 4;
           setSelected(QUADRANT_ORDER[next]); document.getElementById(`tab-${QUADRANT_ORDER[next]}`)?.focus();
-        }}>{q.toUpperCase()}</button>)}</div>
+        }}>{q.toUpperCase()} {QUADRANT_LABELS[q]}</button>)}</div>
     <section id="dictionary-panel" role="tabpanel" aria-labelledby={`tab-${selected}`}>
       <fieldset disabled={busy} className="dictionary-fields">
-        <label htmlFor="dictionary-label">象限ラベル</label>
-        <input id="dictionary-label" value={draft.label} onChange={(event) => change({ label: event.currentTarget.value })} />
         <label htmlFor="dictionary-entries">単語リスト（1 行 1 語）</label>
-        <textarea id="dictionary-entries" rows={10} value={draft.text} onChange={(event) => change({ text: event.currentTarget.value })} aria-describedby="dictionary-help" />
+        <textarea id="dictionary-entries" rows={10} value={draft} onChange={(event) => change(event.currentTarget.value)} aria-describedby="dictionary-help" />
         <div className="save-row"><button type="button" className="commit-button" onClick={() => void save()}>保存</button>
           <span>{dirty ? '未保存の変更があります' : '保存済み'}</span></div>
       </fieldset>
