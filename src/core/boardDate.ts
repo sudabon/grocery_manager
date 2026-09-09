@@ -5,9 +5,22 @@
  */
 export const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
-/** エポックミリ秒が属するボードの日付（JST の `YYYY-MM-DD`）。 */
+/**
+ * `toISOString` が 4 桁の年を返す範囲。これを外れると `+011476-08` のような日付として
+ * 扱えない文字列になり、さらに範囲外では例外になる。
+ */
+const MIN_BOARD_DATE_MS = Date.parse('0000-01-01T00:00:00.000Z');
+const MAX_BOARD_DATE_MS = Date.parse('9999-12-31T23:59:59.999Z');
+
+/**
+ * エポックミリ秒が属するボードの日付（JST の `YYYY-MM-DD`）。
+ * どんな number でも必ず日付を返す。移行やインポートの途中で例外を投げると、
+ * 壊れた 1 件のためにデータベース全体が開けなくなる（schema.ts の upgrade を参照）。
+ */
 export function boardDateOf(epochMs: number): string {
-  return new Date(epochMs + JST_OFFSET_MS).toISOString().slice(0, 10);
+  const shifted = Number.isFinite(epochMs) ? epochMs + JST_OFFSET_MS : MIN_BOARD_DATE_MS;
+  const clamped = Math.min(Math.max(shifted, MIN_BOARD_DATE_MS), MAX_BOARD_DATE_MS);
+  return new Date(clamped).toISOString().slice(0, 10);
 }
 
 /** 現在のボードの日付。呼び出しごとに評価するので、日付が変わればその瞬間から新しい値を返す。 */

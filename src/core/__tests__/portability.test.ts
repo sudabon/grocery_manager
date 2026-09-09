@@ -27,6 +27,9 @@ it.each([
   (d: any) => { d.memos[0].autoClassified = 1; }, (d: any) => { d.settings.partialMatch = 'false'; },
   (d: any) => { d.memos[0].boardDate = '2026/09/09'; }, (d: any) => { d.memos[0].boardDate = 20260909; },
   (d: any) => { d.memos[0].boardDate = null; },
+  // 暦として存在しない日付。受け入れると保存はできるが `?date=` から開けないボードになる。
+  (d: any) => { d.memos[0].boardDate = '2026-02-30'; }, (d: any) => { d.memos[0].boardDate = '2026-99-99'; },
+  (d: any) => { d.memos[0].boardDate = '0000-00-00'; },
   (d: any) => { delete d.settings.showDictationHint; }, (d: any) => { d.settings.autoCommitMs = null; },
 ])('不正な必須項目を全件検証で拒否 %#', (mutate) => {
   const value = JSON.parse(JSON.stringify(fullExport(data()))); mutate(value);

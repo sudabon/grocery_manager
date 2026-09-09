@@ -39,7 +39,7 @@ interface AppStore {
   pendingWrites: number;
   initialize: () => Promise<void>;
   viewBoard: (boardDate: string) => Promise<void>;
-  listBoardDates: () => Promise<string[]>;
+  listBoardDates: () => Promise<string[] | null>;
   listAllMemos: () => Promise<MemoItem[] | null>;
   dismissSaveError: () => void;
   addChips: (chips: NewMemo[]) => Promise<AddChipsResult>;
@@ -155,9 +155,11 @@ export function createAppStore(repo: Repository = repository, persist = requestP
         set({ ready: true, storageAvailable });
       })(),
       viewBoard: async (boardDate) => {
-        // 同じボードの読み直しはしない。保存に失敗して画面にだけ残るチップを消さないため。
-        if (get().viewingBoardDate === boardDate) return;
-        set({ viewingBoardDate: boardDate, viewingIsToday: boardDate === todayBoardDate(), chips: [] });
+        const viewingIsToday = boardDate === todayBoardDate();
+        // 同じボードの読み直しはしない（保存に失敗して画面にだけ残るチップを消さないため）が、
+        // 当日かどうかは選び直した時点で判定し直す。表示したまま日付が変わっていることがある。
+        if (get().viewingBoardDate === boardDate) { set({ viewingIsToday }); return; }
+        set({ viewingBoardDate: boardDate, viewingIsToday, chips: [] });
         try {
           const chips = await repo.getMemos({ boardDate });
           // 読み込み中に別のボードへ切り替わっていたら、古い結果は捨てる。
@@ -166,9 +168,11 @@ export function createAppStore(repo: Repository = repository, persist = requestP
           set({ storageAvailable: false });
         }
       },
+      // 読めなかったことを空リストと区別できるよう null を返す。日付が 1 件も無いことと
+      // 一覧を読めなかったことを、画面で言い分けるため（listAllMemos と同じ規約）。
       listBoardDates: async () => {
         try { return await repo.getBoardDates(); }
-        catch { set({ storageAvailable: false }); return []; }
+        catch { set({ storageAvailable: false }); return null; }
       },
       // 全データのエクスポートは表示中のボードに限らない。chips は表示中のボードだけなので、
       // 全メモはここで読み直す。読めなかったことを空リストと区別できるよう null を返す。

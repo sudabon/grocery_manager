@@ -4,7 +4,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { MemoPage } from '../MemoPage';
 import { defaultSettings, seedDictionaries } from '../../db/defaults';
 import { useAppStore } from '../../store/useAppStore';
-import { boardDateLabel, todayBoardDate } from '../../core/boardDate';
+import { boardDateLabel } from '../../core/boardDate';
 import { boardImageFile } from '../../core/boardImage';
 import { shareFile } from '../../core/shareExport';
 import { commitText } from '../../core/commitText';
@@ -19,10 +19,16 @@ vi.mock('../../core/commitText', () => ({ commitText: vi.fn() }));
 
 const PNG = () => new File([new Uint8Array([137, 80, 78, 71])], 'quadmemo-board-2026-09-09.png', { type: 'image/png' });
 // 当日のボードを表示している状態から始める（MemoPage は開くたびに当日のボードへ切り替える）。
-const TODAY = todayBoardDate();
+// 時刻を固定しないと JST 0:00 をまたいだ実行で描画時の当日が TODAY とずれ、
+// MemoPage の useEffect が別のボードへ切り替えて見出しの検証が落ちる（useAppStore.test.ts と同じ固定時刻）。
+// fake timers ではなく Date.now を差し替えるのは、fake timers が findBy* の自動待機を止めるため。
+const TODAY = '2026-09-09';
+const NOW = Date.parse(`${TODAY}T12:00:00+09:00`);
 const PAST = '2026-09-08';
 
 beforeEach(() => {
+  // restoreMocks: true（vite.config.ts）が各テスト後に元へ戻す。
+  vi.spyOn(Date, 'now').mockReturnValue(NOW);
   vi.mocked(boardImageFile).mockReset();
   vi.mocked(shareFile).mockReset();
   vi.mocked(commitText).mockReset().mockResolvedValue(undefined);

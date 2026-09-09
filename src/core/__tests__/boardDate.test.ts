@@ -58,3 +58,8 @@ it.each(['2026-9-9', '2026/09/09', '2026-02-30', '2026-13-01', '', 'today', '202
   'ボードの日付として拒否する: %j', (value) => {
     expect(isBoardDate(value)).toBe(false);
   });
+it.each([1e18, -1e18, Number.MAX_SAFE_INTEGER, -Number.MAX_SAFE_INTEGER, 3e14, -3e14, NaN, Infinity, -Infinity])(
+  // 移行とインポートがこの全域性に依存する。例外や拡張年（+011476-08）を返すとデータベースが開けなくなる。
+  '範囲外・非数の %p でもボードの日付として妥当な値を返す', (value) => {
+    expect(isBoardDate(boardDateOf(value))).toBe(true);
+  });

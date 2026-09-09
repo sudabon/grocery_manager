@@ -58,6 +58,8 @@ export function openQuadmemoDb() {
         // 既存メモを作成時刻の JST 日付へ振り分ける（design.md - D2）。
         // upgrade トランザクション内で完結させるので、途中で失敗すれば index 追加ごと巻き戻り、
         // 部分適用のデータは残らない（接続は失敗し、保存できない環境として扱われる）。
+        // 失敗すると以降の起動でも同じ upgrade をやり直して同じ場所で失敗するため、
+        // 変換処理は例外を投げない実装にすること（boardDateOf は全域関数である）。
         const migration = (async () => {
           for (let cursor = await memos.openCursor(); cursor; cursor = await cursor.continue()) {
             if (typeof cursor.value.boardDate === 'string') continue;
@@ -65,7 +67,11 @@ export function openQuadmemoDb() {
           }
         })();
         // IDB 由来の失敗はトランザクションが自ら中断するが、移行処理自身の失敗も同じ扱いにする。
-        migration.catch(() => { try { transaction.abort(); } catch { /* Already aborted. */ } });
+        // 中断すると接続ごと失敗し、保存できない環境と見分けが付かなくなるので痕跡は残す。
+        migration.catch((error: unknown) => {
+          console.error('[db] version 2 への移行に失敗しました', error);
+          try { transaction.abort(); } catch { /* Already aborted. */ }
+        });
       }
     },
     blocking() { connection = undefined; void opened.then((db) => db.close()).catch(() => {}); },

@@ -1,4 +1,4 @@
-import { boardDateOf, todayBoardDate } from './boardDate';
+import { boardDateOf, isBoardDate, todayBoardDate } from './boardDate';
 import { QUADRANT_ORDER, type QuadrantId } from './classify';
 import { QUADRANT_LABELS } from '../db/defaults';
 import { sanitizeEntries } from './dictEntries';
@@ -35,7 +35,6 @@ function settings(value: unknown): PortableSettings {
   return { key: 'app', partialMatch: s.partialMatch, allowDuplicates: s.allowDuplicates,
     showDictationHint: s.showDictationHint, autoCommitMs: clampAutoCommitMs(s.autoCommitMs) };
 }
-const boardDate = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
 function memos(value: unknown): MemoItem[] {
   if (!Array.isArray(value)) throw invalid();
   return value.map((item) => {
@@ -43,9 +42,9 @@ function memos(value: unknown): MemoItem[] {
     if (typeof m.id !== 'string' || !m.id || typeof m.rawText !== 'string' || typeof m.normText !== 'string' ||
       !quadrant(m.quadrant) || !(m.matchedEntry === null || typeof m.matchedEntry === 'string') ||
       typeof m.autoClassified !== 'boolean' || !finite(m.createdAt) || !finite(m.updatedAt) ||
-      (m.boardDate !== undefined && !boardDate(m.boardDate))) throw invalid();
+      (m.boardDate !== undefined && !isBoardDate(m.boardDate))) throw invalid();
     // 日付を持たない旧版のメモは作成時刻の JST 日付へ振り分ける（design.md - D6）。
-    return { id: m.id, boardDate: boardDate(m.boardDate) ? m.boardDate : boardDateOf(m.createdAt),
+    return { id: m.id, boardDate: isBoardDate(m.boardDate) ? m.boardDate : boardDateOf(m.createdAt),
       rawText: m.rawText, normText: m.normText, quadrant: m.quadrant,
       matchedEntry: m.matchedEntry, autoClassified: m.autoClassified, createdAt: m.createdAt, updatedAt: m.updatedAt };
   });

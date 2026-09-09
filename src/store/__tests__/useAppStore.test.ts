@@ -302,13 +302,19 @@ it('ボードを切り替えるとその日付のチップだけを読み、当�
   expect(store.getState()).toMatchObject({ viewingBoardDate: BOARD, viewingIsToday: true });
   expect(store.getState().chips.map((item) => item.id)).toEqual(['today']);
 });
-it('同じ日付への切り替えは読み直さない', async () => {
+it('同じ日付への切り替えは読み直さないが、当日かどうかは判定し直す', async () => {
   vi.useFakeTimers(); vi.setSystemTime(NOW);
   store = createAppStore(repo, async () => 'granted');
   await store.getState().initialize();
   vi.mocked(repo.getMemos).mockClear();
   await store.getState().viewBoard(BOARD);
   expect(repo.getMemos).not.toHaveBeenCalled();
+  // 表示したまま日付が変わったあと、一覧から同じ日付を選び直す（/?date=<表示中の日付>）。
+  // 読み直しは抑止したままでも、参照専用として見せるため当日判定は更新する。
+  vi.setSystemTime(NOW + 24 * 60 * 60 * 1000);
+  await store.getState().viewBoard(BOARD);
+  expect(repo.getMemos).not.toHaveBeenCalled();
+  expect(store.getState()).toMatchObject({ viewingBoardDate: BOARD, viewingIsToday: false });
 });
 it('過去のボード表示中は追加・移動・編集・削除のどれも状態を変えない', async () => {
   const actions = await viewingPastBoard();
@@ -357,7 +363,8 @@ it('日付の一覧は保存層に委譲し、失敗時は空で保存不可に�
   vi.mocked(repo.getBoardDates).mockResolvedValue([BOARD, PAST]);
   expect(await store.getState().listBoardDates()).toEqual([BOARD, PAST]);
   vi.mocked(repo.getBoardDates).mockRejectedValue(new Error('blocked'));
-  expect(await store.getState().listBoardDates()).toEqual([]);
+  // 0 件と読み取り失敗を呼び出し側が言い分けられるよう null を返す。
+  expect(await store.getState().listBoardDates()).toBeNull();
   expect(store.getState().storageAvailable).toBe(false);
 });
 it('インポートしたメモのうち表示中のボードの日付だけを画面に載せる', async () => {

@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 import { deleteDB, unwrap } from 'idb';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { openQuadmemoDb, QUADMEMO_DB_VERSION, type MemoItem } from '../schema';
-import { boardDateOf } from '../../core/boardDate';
+import { boardDateOf, isBoardDate } from '../../core/boardDate';
 import { createRepository, requestPersistence } from '../repository';
 import { defaultSettings, seedDictionaries } from '../defaults';
 
@@ -116,6 +116,39 @@ it('version 1 のデータを version 2 へ移行してメモを失わず作成�
   expect((await repo.getMemos({ boardDate: '2026-09-09' })).map((item) => item.id)).toEqual(['b']);
   // 本文などの既存フィールドは書き換えない。
   expect(migrated[0]).toMatchObject({ rawText: '牛乳', normText: '牛乳', quadrant: 'q3', matchedEntry: '牛乳', autoClassified: true });
+});
+it('変換できない createdAt を持つ v1 レコードがあっても移行が成功する', async () => {
+  db.close(); await deleteDB('quadmemo');
+  // v1 のインポート検証は Number.isFinite しか見ていなかったため、Date で表現できない
+  // createdAt も保存され得た。1 件でも変換に失敗すると upgrade ごと abort され、
+  // 以降どの起動でもデータベースが開けなくなる（boardDateOf を全域関数にしている理由）。
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open('quadmemo', 1);
+    request.onupgradeneeded = () => {
+      const store = request.result.createObjectStore('memos', { keyPath: 'id' });
+      store.createIndex('quadrant', 'quadrant');
+      store.createIndex('createdAt', 'createdAt');
+      request.result.createObjectStore('dictionaries', { keyPath: 'quadrant' });
+      request.result.createObjectStore('settings', { keyPath: 'key' });
+      for (const createdAt of [1e18, Date.parse('2026-09-09T09:00:00+09:00')]) {
+        const { boardDate: _omitted, ...withoutDate } = memo(`memo-${createdAt}`, createdAt);
+        store.put(withoutDate);
+      }
+    };
+    request.onsuccess = () => { request.result.close(); resolve(); };
+    request.onerror = () => reject(request.error);
+  });
+  db = await openQuadmemoDb(); repo = createRepository(async () => db);
+  expect(db.version).toBe(2);
+  const migrated = await repo.getMemos();
+  // 壊れた 1 件のために他のメモまで失わない。
+  expect(migrated).toHaveLength(2);
+  for (const item of migrated) expect(isBoardDate(item.boardDate)).toBe(true);
+  expect(migrated.find((item) => item.createdAt === 1e18)!.boardDate).toBe('9999-12-31');
+  const sane = migrated.find((item) => item.createdAt !== 1e18)!;
+  expect(sane.boardDate).toBe(boardDateOf(sane.createdAt));
+  // 移行後は日付の索引で引ける。
+  expect(await repo.getBoardDates()).toEqual(['9999-12-31', BOARD]);
 });
 it('version 2 で開き直しても日付を持つレコードを書き換えない', async () => {
   await repo.putMemos([memo('a', 5, '2026-01-02')]);
