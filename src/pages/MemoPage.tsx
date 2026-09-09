@@ -1,9 +1,10 @@
-import { useCallback, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { QuadrantGrid } from '../components/QuadrantGrid';
 import { InputBar } from '../components/InputBar';
 import { ChipActionSheet } from '../components/ChipActionSheet';
 import { Toast, useToast } from '../components/Toast';
+import { boardDateLabel, isBoardDate, todayBoardDate } from '../core/boardDate';
 import { commitText } from '../core/commitText';
 import { boardImageFile, boardImageLayout } from '../core/boardImage';
 import { exportFileName } from '../core/portability';
@@ -14,6 +15,15 @@ export function MemoPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const close = useCallback(() => setSelected(null), []);
   const toast = useToast();
+  const viewingBoardDate = useAppStore((state) => state.viewingBoardDate);
+  const viewingIsToday = useAppStore((state) => state.viewingIsToday);
+  const [params] = useSearchParams();
+  const requestedDate = params.get('date');
+  useEffect(() => {
+    // メモ画面を開くたびに当日のボードへ戻す。日付の一覧から選んだときだけ、その日付のボードを表示する
+    // （spec: 過去ボードから戻ると当日ボードが表示される）。同じ日付なら viewBoard 側で読み直さない。
+    void useAppStore.getState().viewBoard(isBoardDate(requestedDate) ? requestedDate : todayBoardDate());
+  }, [requestedDate]);
   const dictionariesEmpty = useAppStore((state) => state.dictionaries.every((d) => d.entries.length === 0));
   const storageAvailable = useAppStore((state) => state.storageAvailable);
   const saveError = useAppStore((state) => state.saveErrors[0]);
@@ -29,10 +39,10 @@ export function MemoPage() {
   // 画像の組み立てから受け渡しまで await を挟まない。iOS はジェスチャが切れると共有シートを開かない
   // （design.md - D2）。共有は読み取りだけで、ストアにも IndexedDB にも書き込まない。
   const shareBoardImage = useCallback(() => {
-    const { chips } = useAppStore.getState();
+    const { chips, viewingBoardDate: boardDate } = useAppStore.getState();
     let file: File;
     // 利用者向けの案内は汎用文でよいが、Canvas 非対応・書き出し失敗・共有失敗を実機で切り分けられるよう痕跡は残す。
-    try { file = boardImageFile(boardImageLayout(chips), exportFileName('board')); }
+    try { file = boardImageFile(boardImageLayout(chips, boardDate), exportFileName('board', boardDate), boardDate); }
     catch (error) {
       console.error('[board-image] 画像を作成できませんでした', error);
       toast.notify('画像を作成できませんでした。もう一度お試しください。'); return;
@@ -48,11 +58,22 @@ export function MemoPage() {
       <button type="button" aria-label="保存の案内を閉じる" onClick={() => setBannerClosed(true)}>閉じる</button>
     </aside>}
     {dictionariesEmpty && <aside className="dictionary-prompt"><Link to="/dictionaries">辞書を設定すると自動で振り分けられます</Link></aside>}
-    <div className="board-actions"><button type="button" className="board-share-button" onClick={shareBoardImage}>画像で共有</button></div>
-    <QuadrantGrid onSelect={setSelected} />
+    <div className="board-actions">
+      <h2 className="board-date">{boardDateLabel(viewingBoardDate)}<span className="board-date-badge">{viewingIsToday ? '（今日）' : '（過去のボード）'}</span></h2>
+      {/* 日付の導線はボードの操作行に置く。アプリのヘッダーへ足すと iPhone の幅で 2 行になり、
+          ボードの高さを常に削るため（メモ画面が主画面）。 */}
+      <div className="board-action-links">
+        {!viewingIsToday && <Link to="/">当日のボードへ戻る</Link>}
+        <Link to="/history">日付の一覧</Link>
+        <button type="button" className="board-share-button" onClick={shareBoardImage}>画像で共有</button>
+      </div>
+    </div>
+    {!viewingIsToday && <p className="board-readonly-note">過去のボードは参照だけできます。</p>}
+    <QuadrantGrid onSelect={setSelected} readOnly={!viewingIsToday} />
     <span className="visually-hidden">{pendingWrites ? '保存中' : '保存処理完了'}</span>
-    <InputBar onCommit={commit} />
+    {/* 過去のボードでは入力してコミットする手段を提供しない（spec: 過去ボードは読み取り専用）。 */}
+    {viewingIsToday && <InputBar onCommit={commit} />}
     <Toast message={saveError ?? toast.message} dismiss={saveError ? dismissSaveError : toast.dismiss} />
-    {selected && <ChipActionSheet id={selected} onClose={close} notify={toast.notify} />}
+    {selected && viewingIsToday && <ChipActionSheet id={selected} onClose={close} notify={toast.notify} />}
   </main>;
 }

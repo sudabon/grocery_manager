@@ -1,7 +1,7 @@
 {
   "app": "quadmemo",
   "schemaVersion": 1,
-  "exportedAt": "2026-09-08T00:00:00Z",
+  "exportedAt": "2026-09-09T00:00:00Z",
   "dictionaries": [
     {
       "quadrant": "q1",
@@ -36,31 +36,41 @@
   ],
   "memos": [
     {
-      "id": "01J00000000000000000000001",
-      "rawText": "apple",
-      "normText": "apple",
-      "quadrant": "q1",
-      "matchedEntry": "apple",
-      "autoClassified": true,
-      "createdAt": 1788912000000,
-      "updatedAt": 1788912000000
-    },
-    {
-      "id": "new-memo",
+      "id": "legacy-today",
       "rawText": "orange",
       "normText": "orange",
       "quadrant": "q1",
       "matchedEntry": "orange",
       "autoClassified": true,
-      "createdAt": 1788912000001,
-      "updatedAt": 1788912000001
+      "createdAt": 1788881400000,
+      "updatedAt": 1788881400000
+    },
+    {
+      "id": "legacy-yesterday",
+      "rawText": "ぱん",
+      "normText": "ぱん",
+      "quadrant": "q2",
+      "matchedEntry": "ぱん",
+      "autoClassified": true,
+      "createdAt": 1788877800000,
+      "updatedAt": 1788877800000
+    },
+    {
+      "id": "legacy-older",
+      "rawText": "牛乳",
+      "normText": "牛乳",
+      "quadrant": "q3",
+      "matchedEntry": "牛乳",
+      "autoClassified": true,
+      "createdAt": 1788663600000,
+      "updatedAt": 1788663600000
     }
   ],
   "settings": {
     "key": "app",
-    "partialMatch": true,
-    "autoCommitMs": 700,
-    "allowDuplicates": false,
-    "showDictationHint": false
+    "partialMatch": false,
+    "autoCommitMs": 1500,
+    "allowDuplicates": true,
+    "showDictationHint": true
   }
 }

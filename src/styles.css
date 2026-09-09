@@ -23,7 +23,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, section:focus-visibl
 .app-header a { width: fit-content; font-size: .875rem; padding-block: 12px; text-decoration: none; }
 .app-header a:last-child { justify-self: end; }
 .memo-page { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-bottom: calc(168px + env(safe-area-inset-bottom)); }
-.board-actions { flex: none; display: flex; justify-content: flex-end; padding: 6px max(12px, env(safe-area-inset-right)) 6px max(12px, env(safe-area-inset-left)); }
+.board-actions { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; padding: 6px max(12px, env(safe-area-inset-right)) 6px max(12px, env(safe-area-inset-left)); }
+.board-date { margin: 0; font-size: .9375rem; font-weight: 650; letter-spacing: -.02em; }
+.board-date-badge { margin-left: 2px; font-size: .75rem; font-weight: 500; color: #536459; }
+.board-action-links { display: flex; align-items: center; gap: 12px; }
+.board-action-links a { font-size: .8125rem; padding-block: 12px; }
+.board-readonly-note { flex: none; margin: 0 0 6px; padding-inline: max(12px, env(safe-area-inset-left)); font-size: .75rem; color: #536459; }
+.board-date-list { list-style: none; margin: 0; padding: 0; }
+.board-date-list li { border-bottom: 1px solid #c5cbc4; }
+.board-date-list a { display: block; min-height: 48px; padding: 14px 4px; text-decoration: none; }
 .board-share-button { min-height: 44px; padding: 6px 14px; font-size: .8125rem; border: 1px solid #839084; border-radius: 10px; background: #fffdf8; }
 .quadrant-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); flex: 1; min-width: 0; min-height: 0; gap: 1px; background: #bfc8bf; border-bottom: 1px solid #bfc8bf; }
 .quadrant { min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; padding: 18px; background: #f6f5f0; scrollbar-width: thin; }
@@ -68,6 +76,8 @@ button:disabled { opacity: .45; cursor: default; }
 @media (max-width: 420px) { .quadrant { padding: 12px; } .quadrant h2 { gap: 6px; } .chip { padding: 7px 10px; } }
 @media (prefers-reduced-motion: reduce) { .chip { animation: none; } }
 
+/* 過去のボードのチップは押せないが、記録として読むためのものなので薄くしすぎない。 */
+.chip:disabled { opacity: 1; border-style: solid; border-color: #a4aea6; background: #f6f5f0; }
 .chip-highlighted { outline: 3px solid #966b22; outline-offset: 2px; background: #fff0c7; }
 .chip-unsaved { box-shadow: inset 0 -2px #f6ca70; }
 .storage-banner { padding: 10px 16px; background: #493922; color: #ffe6b8; font-size: 13px; }

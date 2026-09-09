@@ -3,7 +3,7 @@ import { QUADRANT_LIMIT_MESSAGE } from '../core/quadrantLength';
 import { QUADRANT_ORDER } from '../core/classify';
 import { QUADRANT_LABELS } from '../db/defaults';
 import { Modal } from './Modal';
-import { useAppStore } from '../store/useAppStore';
+import { BOARD_READ_ONLY_MESSAGE, useAppStore } from '../store/useAppStore';
 
 const CHIP_MISSING_MESSAGE = 'メモが見つかりませんでした。';
 const CHIP_OP_FAILED_MESSAGE = '操作できませんでした。もう一度お試しください。';
@@ -23,6 +23,7 @@ export function ChipActionSheet({ id, onClose, notify }: { id: string; onClose: 
       void useAppStore.getState().editChip(id, text).then((result) => {
         if (result.ok) { onClose(); return; }
         if (result.reason === 'not-found') { onClose(); notify(CHIP_MISSING_MESSAGE); return; }
+        if (result.reason === 'read-only') { onClose(); notify(BOARD_READ_ONLY_MESSAGE); return; }
         notify(QUADRANT_LIMIT_MESSAGE);
       }).catch(() => { onClose(); notify(CHIP_OP_FAILED_MESSAGE); });
     }}>
@@ -36,6 +37,7 @@ export function ChipActionSheet({ id, onClose, notify }: { id: string; onClose: 
           void useAppStore.getState().moveChip(id, quadrant).then((result) => {
             if (result.ok) { onClose(); return; }
             if (result.reason === 'not-found') { onClose(); notify(CHIP_MISSING_MESSAGE); return; }
+            if (result.reason === 'read-only') { onClose(); notify(BOARD_READ_ONLY_MESSAGE); return; }
             notify(QUADRANT_LIMIT_MESSAGE);
           }).catch(() => { onClose(); notify(CHIP_OP_FAILED_MESSAGE); });
         }}>{quadrant.toUpperCase()} {QUADRANT_LABELS[quadrant]}へ移動</button>)}</div>

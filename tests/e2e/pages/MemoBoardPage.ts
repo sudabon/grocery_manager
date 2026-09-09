@@ -12,10 +12,24 @@ export class MemoBoardPage {
   get editInput() { return this.sheet.getByRole('textbox', { name: 'メモの編集' }); }
   get toast() { return this.page.getByRole('status'); }
   get shareImageButton() { return this.page.getByRole('button', { name: '画像で共有', exact: true }); }
+  /** 表示中のボードの日付。当日/過去の区別は badge で見る。 */
+  boardHeading(label: string) { return this.page.getByRole('heading', { name: new RegExp(`^${label}`) }); }
+  get todayBadge() { return this.page.getByText('（今日）', { exact: true }); }
+  get pastBadge() { return this.page.getByText('（過去のボード）', { exact: true }); }
+  get backToToday() { return this.page.getByRole('link', { name: '当日のボードへ戻る', exact: true }); }
+  get historyLink() { return this.page.getByRole('link', { name: '日付の一覧', exact: true }); }
   async shareImage() { await this.shareImageButton.click(); }
   async downloadImage() { const download = this.page.waitForEvent('download'); await this.shareImageButton.click(); return download; }
   /** 象限ごとのチップ本文。共有の前後で同一であることの比較に使う。 */
   async quadrantTexts() { return Promise.all([1, 2, 3, 4].map((id) => this.quadrantChips(id).allInnerTexts())); }
+  /**
+   * 象限ごとのチップ本文を検証する。ボードの読み込みは非同期なので、先に件数の
+   * 自動待機アサーションで揃うのを待ってから配置を比べる（allInnerTexts は待たない）。
+   */
+  async expectQuadrantTexts(expected: string[][]) {
+    await expect(this.chips).toHaveCount(expected.flat().length);
+    expect(await this.quadrantTexts()).toEqual(expected);
+  }
   quadrant(id: number) { return this.board.getByRole('region', { name: new RegExp(`^Q${id} `) }); }
   remaining(id: number) { return this.quadrant(id).getByText(/^残り\d+文字$/); }
   quadrantChips(id: number) { return this.quadrant(id).getByRole('button', { name: /^メモ「/ }); }

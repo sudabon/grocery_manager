@@ -1,7 +1,7 @@
 import { monotonicFactory } from 'ulid';
 import { tokenize } from './tokenize';
 import { resolvePlacement } from './resolvePlacement';
-import { useAppStore } from '../store/useAppStore';
+import { BOARD_READ_ONLY_MESSAGE, useAppStore } from '../store/useAppStore';
 import { QUADRANT_LIMIT_MESSAGE } from './quadrantLength';
 import { normalize } from './normalize';
 
@@ -19,7 +19,10 @@ export async function commitText(text: string, notify: (message: string) => void
     }] : [];
   }));
   const truncated = tokens.length > 50;
-  if (result.rejected && !result.added) {
+  // 表示したまま日付が変わった場合は、コミットの手段があるのに保存されないので理由を伝える（design.md - D4）。
+  if (result.readOnly) {
+    notify(BOARD_READ_ONLY_MESSAGE);
+  } else if (result.rejected && !result.added) {
     notify(truncated ? `先頭50件のみ処理しました。${QUADRANT_LIMIT_MESSAGE}` : QUADRANT_LIMIT_MESSAGE);
   } else if (result.rejected || (truncated && result.added)) {
     notify('一部のみ登録しました。登録されなかった単語は、もう一度入力してください。');

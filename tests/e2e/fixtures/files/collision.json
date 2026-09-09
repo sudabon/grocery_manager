@@ -42,8 +42,8 @@
       "quadrant": "q3",
       "matchedEntry": "apple",
       "autoClassified": true,
-      "createdAt": 1,
-      "updatedAt": 1
+      "createdAt": 1788912000000,
+      "updatedAt": 1788912000000
     },
     {
       "id": "new-memo",
@@ -52,8 +52,8 @@
       "quadrant": "q1",
       "matchedEntry": "orange",
       "autoClassified": true,
-      "createdAt": 1,
-      "updatedAt": 1
+      "createdAt": 1788912000001,
+      "updatedAt": 1788912000001
     }
   ],
   "settings": {

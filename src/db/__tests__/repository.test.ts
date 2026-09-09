@@ -1,13 +1,15 @@
 import 'fake-indexeddb/auto';
 import { deleteDB, unwrap } from 'idb';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { openQuadmemoDb, type MemoItem } from '../schema';
+import { openQuadmemoDb, QUADMEMO_DB_VERSION, type MemoItem } from '../schema';
+import { boardDateOf, isBoardDate } from '../../core/boardDate';
 import { createRepository, requestPersistence } from '../repository';
 import { defaultSettings, seedDictionaries } from '../defaults';
 
 let db: Awaited<ReturnType<typeof openQuadmemoDb>>;
 let repo: ReturnType<typeof createRepository>;
-const memo = (id: string, createdAt = 1): MemoItem => ({ id, rawText: '牛乳', normText: '牛乳', quadrant: 'q3', matchedEntry: '牛乳', autoClassified: true, createdAt, updatedAt: createdAt });
+const BOARD = '2026-09-09';
+const memo = (id: string, createdAt = 1, boardDate = BOARD): MemoItem => ({ id, boardDate, rawText: '牛乳', normText: '牛乳', quadrant: 'q3', matchedEntry: '牛乳', autoClassified: true, createdAt, updatedAt: createdAt });
 beforeEach(async () => { db = await openQuadmemoDb(); repo = createRepository(async () => db); });
 afterEach(async () => { db.close(); await deleteDB('quadmemo'); vi.unstubAllGlobals(); });
 it('インポートで端末のインストール案内の記録をリセットしない', async () => {
@@ -48,19 +50,111 @@ it('インポートで端末の明示的な false も保持される', async () 
   expect(await db.get('settings', 'app')).toEqual(imported.settings);
   expect(await repo.getSettings()).toEqual(imported.settings);
 });
-it('v1スキーマとメモCRUD・作成順・象限別取得', async () => {
-  expect(db.version).toBe(1);
+it('v2スキーマとメモCRUD・作成順・象限別取得', async () => {
+  expect(db.version).toBe(2);
+  expect(QUADMEMO_DB_VERSION).toBe(2);
   expect([...db.objectStoreNames]).toEqual(['dictionaries', 'memos', 'settings']);
   const store = db.transaction('memos').store;
   expect(store.keyPath).toBe('id');
-  expect([...store.indexNames]).toEqual(['createdAt', 'quadrant']);
+  expect([...store.indexNames]).toEqual(['boardDate', 'createdAt', 'quadrant']);
   await repo.putMemos([memo('b', 2), memo('c'), memo('a')]);
   expect((await repo.getMemos()).map((item) => item.id)).toEqual(['a', 'c', 'b']);
   await repo.putMemos([{ ...memo('a'), quadrant: 'q1', rawText: '編集', normText: '編集' }]);
-  expect(await repo.getMemos('q1')).toMatchObject([{ id: 'a', rawText: '編集' }]);
-  expect(await repo.getMemos('q3')).toHaveLength(2);
+  expect(await repo.getMemos({ quadrant: 'q1' })).toMatchObject([{ id: 'a', rawText: '編集' }]);
+  expect(await repo.getMemos({ quadrant: 'q3' })).toHaveLength(2);
   await repo.removeMemo('a'); expect(await repo.getMemos()).toHaveLength(2);
   await repo.clearMemos(); expect(await repo.getMemos()).toEqual([]);
+});
+it('日付で絞って読み、日付と象限の併用もできる', async () => {
+  await repo.putMemos([memo('a', 1), memo('b', 2, '2026-09-08'), { ...memo('c', 3), quadrant: 'q1' }]);
+  expect((await repo.getMemos({ boardDate: BOARD })).map((item) => item.id)).toEqual(['a', 'c']);
+  expect((await repo.getMemos({ boardDate: '2026-09-08' })).map((item) => item.id)).toEqual(['b']);
+  expect(await repo.getMemos({ boardDate: '2026-09-07' })).toEqual([]);
+  expect((await repo.getMemos({ boardDate: BOARD, quadrant: 'q1' })).map((item) => item.id)).toEqual(['c']);
+});
+it('チップがある日付だけを新しい順で返す', async () => {
+  expect(await repo.getBoardDates()).toEqual([]);
+  await repo.putMemos([memo('a', 1, '2026-09-06'), memo('b', 2, BOARD), memo('c', 3, BOARD), memo('d', 4, '2026-09-08')]);
+  expect(await repo.getBoardDates()).toEqual(['2026-09-09', '2026-09-08', '2026-09-06']);
+  await repo.removeMemo('d');
+  expect(await repo.getBoardDates()).toEqual(['2026-09-09', '2026-09-06']);
+});
+it('version 1 のデータを version 2 へ移行してメモを失わず作成日の JST 日付を書き込む', async () => {
+  db.close(); await deleteDB('quadmemo');
+  // version 1 のストアと、日付を持たないレコードを native IDB で再現する。
+  const legacy = [
+    { id: 'a', createdAt: Date.parse('2026-09-10T00:30:00+09:00') },   // JST 0:30（UTC では前日）
+    { id: 'b', createdAt: Date.parse('2026-09-09T23:30:00+09:00') },
+    { id: 'c', createdAt: Date.parse('2026-09-06T12:00:00+09:00') },
+  ];
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open('quadmemo', 1);
+    request.onupgradeneeded = () => {
+      const store = request.result.createObjectStore('memos', { keyPath: 'id' });
+      store.createIndex('quadrant', 'quadrant');
+      store.createIndex('createdAt', 'createdAt');
+      request.result.createObjectStore('dictionaries', { keyPath: 'quadrant' });
+      request.result.createObjectStore('settings', { keyPath: 'key' });
+      for (const { id, createdAt } of legacy) {
+        const { boardDate: _omitted, ...withoutDate } = memo(id, createdAt);
+        store.put(withoutDate);
+      }
+    };
+    request.onsuccess = () => { request.result.close(); resolve(); };
+    request.onerror = () => reject(request.error);
+  });
+  db = await openQuadmemoDb(); repo = createRepository(async () => db);
+  expect(db.version).toBe(2);
+  const migrated = await repo.getMemos();
+  expect(migrated).toHaveLength(legacy.length);
+  expect(migrated.map(({ id, boardDate }) => ({ id, boardDate }))).toEqual([
+    { id: 'c', boardDate: '2026-09-06' }, { id: 'b', boardDate: '2026-09-09' }, { id: 'a', boardDate: '2026-09-10' },
+  ]);
+  for (const item of migrated) expect(item.boardDate).toBe(boardDateOf(item.createdAt));
+  // 移行後は日付の索引で引ける。
+  expect(await repo.getBoardDates()).toEqual(['2026-09-10', '2026-09-09', '2026-09-06']);
+  expect((await repo.getMemos({ boardDate: '2026-09-09' })).map((item) => item.id)).toEqual(['b']);
+  // 本文などの既存フィールドは書き換えない。
+  expect(migrated[0]).toMatchObject({ rawText: '牛乳', normText: '牛乳', quadrant: 'q3', matchedEntry: '牛乳', autoClassified: true });
+});
+it('変換できない createdAt を持つ v1 レコードがあっても移行が成功する', async () => {
+  db.close(); await deleteDB('quadmemo');
+  // v1 のインポート検証は Number.isFinite しか見ていなかったため、Date で表現できない
+  // createdAt も保存され得た。1 件でも変換に失敗すると upgrade ごと abort され、
+  // 以降どの起動でもデータベースが開けなくなる（boardDateOf を全域関数にしている理由）。
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open('quadmemo', 1);
+    request.onupgradeneeded = () => {
+      const store = request.result.createObjectStore('memos', { keyPath: 'id' });
+      store.createIndex('quadrant', 'quadrant');
+      store.createIndex('createdAt', 'createdAt');
+      request.result.createObjectStore('dictionaries', { keyPath: 'quadrant' });
+      request.result.createObjectStore('settings', { keyPath: 'key' });
+      for (const createdAt of [1e18, Date.parse('2026-09-09T09:00:00+09:00')]) {
+        const { boardDate: _omitted, ...withoutDate } = memo(`memo-${createdAt}`, createdAt);
+        store.put(withoutDate);
+      }
+    };
+    request.onsuccess = () => { request.result.close(); resolve(); };
+    request.onerror = () => reject(request.error);
+  });
+  db = await openQuadmemoDb(); repo = createRepository(async () => db);
+  expect(db.version).toBe(2);
+  const migrated = await repo.getMemos();
+  // 壊れた 1 件のために他のメモまで失わない。
+  expect(migrated).toHaveLength(2);
+  for (const item of migrated) expect(isBoardDate(item.boardDate)).toBe(true);
+  expect(migrated.find((item) => item.createdAt === 1e18)!.boardDate).toBe('9999-12-31');
+  const sane = migrated.find((item) => item.createdAt !== 1e18)!;
+  expect(sane.boardDate).toBe(boardDateOf(sane.createdAt));
+  // 移行後は日付の索引で引ける。
+  expect(await repo.getBoardDates()).toEqual(['9999-12-31', BOARD]);
+});
+it('version 2 で開き直しても日付を持つレコードを書き換えない', async () => {
+  await repo.putMemos([memo('a', 5, '2026-01-02')]);
+  db.close();
+  db = await openQuadmemoDb(); repo = createRepository(async () => db);
+  expect(await repo.getMemos()).toEqual([memo('a', 5, '2026-01-02')]);
 });
 it('50件を単一トランザクションで書き込む', async () => {
   const transaction = vi.spyOn(db, 'transaction');

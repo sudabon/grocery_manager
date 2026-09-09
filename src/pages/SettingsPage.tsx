@@ -9,6 +9,7 @@ import { SaveFeedback } from '../components/SaveFeedback';
 import { useToast } from '../components/Toast';
 import { usePwaState } from '../pwa/usePwaState';
 import type { PwaState } from '../pwa/registerSW';
+import type { MemoItem } from '../db/schema';
 
 export function SettingsPage() {
   const pwa = usePwaState();
@@ -23,9 +24,15 @@ export function SettingsPage() {
   const [deleteStep, setDeleteStep] = useState(0);
   const [incoming, setIncoming] = useState<AppData | null>(null);
   const [busy, setBusy] = useState(false);
+  // 全データのエクスポートは表示中のボード以外のメモも含める。共有はユーザージェスチャを失えないため
+  // （shareExport のコメント）、クリック時に読まず画面を開いた時点で読んでおく。
+  // 未読込（undefined）と読み取り失敗（memos: null）を区別する。
+  const [backup, setBackup] = useState<{ memos: MemoItem[] | null }>();
   const lock = useRef(false);
   const toast = useToast();
   const close = useCallback(() => { if (!lock.current) { setDeleteStep(0); setIncoming(null); } }, []);
+  const refreshBackup = useCallback(async () => { setBackup({ memos: await useAppStore.getState().listAllMemos() }); }, []);
+  useEffect(() => { void refreshBackup(); }, [refreshBackup]);
   useEffect(() => { setToggleValues(settings); }, [settings]);
   useEffect(() => { setWaitMs(settings.autoCommitMs); }, [settings.autoCommitMs]);
   useEffect(() => {
@@ -59,6 +66,8 @@ export function SettingsPage() {
       if (incoming) {
         if (await useAppStore.getState().importData(incoming)) toast.notify('全データをインポートしました');
       } else await useAppStore.getState().clearAll();
+      // メモが変わったので、次のエクスポートに備えて読み直す。
+      await refreshBackup();
       setIncoming(null); setDeleteStep(0);
     } finally { lock.current = false; setBusy(false); }
   }
@@ -88,13 +97,14 @@ export function SettingsPage() {
       {/* 3 つの導線で条件が違う: エクスポートは書き込み能力を必要としないので塞がず、読み込み失敗だけを開示する。
           インポートは失敗しても applyImport がトランザクションを中断して無変更に戻るため塞がず開示に留める。
           メモ全削除だけは storageAvailable で塞ぐ（押しても必ず失敗し、画面から 1 件も消えないため）。 */}
-      {!dataLoaded && <p className="help-text">端末のデータを読み込めなかったため、出力できるのは現在画面に表示されている内容だけです。復元用のバックアップとしては使わないでください。</p>}
+      {(!dataLoaded || backup?.memos === null) && <p className="help-text">端末のデータを読み込めなかったため、出力できるのは現在画面に表示されている内容だけです。復元用のバックアップとしては使わないでください。</p>}
       {!storageAvailable && <p className="help-text">この環境では端末にデータを保存できないため、インポートは失敗する可能性があります。</p>}
-      <button type="button" className="secondary-button" disabled={busy || pendingWrites > 0} onClick={() => {
+      <button type="button" className="secondary-button" disabled={busy || pendingWrites > 0 || !backup} onClick={() => {
         const state = useAppStore.getState();
         let payload: ReturnType<typeof fullExport>;
         try {
-          payload = fullExport({ dictionaries: state.dictionaries, memos: state.chips, settings: state.settings });
+          // 読めなかった場合だけ、表示中のボードの内容で出力する（上の案内で断り書きを出す）。
+          payload = fullExport({ dictionaries: state.dictionaries, memos: backup?.memos ?? state.chips, settings: state.settings });
         } catch {
           toast.notify('エクスポートできませんでした。もう一度お試しください。');
           return;
