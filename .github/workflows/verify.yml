@@ -1,7 +1,10 @@
 name: verify
 
-# AWS 接続を必要としない検証（README「AWS 接続なしでのコード検証」と同じ内容）を回す。
+# AWS 接続を必要としない検証（README「AWS 接続なしでのコード検証」のうち、
+# openspec の change に関する検証を除いたもの）を回す。
 # 配信 E2E は実際の CloudFront 配信先が必要なため、ここでは実行しない。
+# test-plan と @<change-id> タグの対応（scripts/check-test-plan.sh）は CI では検証せず、
+# 必要なときに手元で --change を指定して実行する。
 on:
   push:
     branches: [main]
@@ -15,9 +18,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          # check-test-plan.sh がベースコミットとの差分を見るため、全履歴が必要。
-          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -31,13 +31,6 @@ jobs:
       - run: bash -n scripts/check-test-plan.sh
       # ブラウザは不要。playwright.config.ts と TS の健全性を確認する。
       - run: npx playwright test --list --grep @setup-quadmemo-hosting
-      # test-plan と @<change-id> タグの対応は PR の差分に対してのみ検証できる。
-      # 値は env 経由で渡す（run: へ直接展開しない）。
-      - name: check test-plan coverage
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: bash scripts/check-test-plan.sh "$BASE_SHA"
 
   terraform:
     runs-on: ubuntu-latest
