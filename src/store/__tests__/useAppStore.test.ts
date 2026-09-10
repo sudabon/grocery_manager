@@ -10,6 +10,9 @@ const chip = (id: string): MemoItem => ({ id, boardDate: BOARD, rawText: '牛乳
 let repo: Repository;
 let store: ReturnType<typeof createAppStore>;
 beforeEach(() => {
+  // 日付ごとのボードを持つため、store 生成時の todayBoardDate() が chip() の boardDate と
+  // 一致するよう、実行日に依存しない固定時刻にしてからストアを作る。
+  vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(NOW);
   repo = {
     getAllData: vi.fn(), applyImport: vi.fn(),
     getMemos: vi.fn().mockResolvedValue([]), putMemos: vi.fn().mockResolvedValue(undefined),
