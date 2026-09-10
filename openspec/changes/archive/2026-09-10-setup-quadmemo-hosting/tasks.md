@@ -25,21 +25,21 @@
 
 ## 4. 初回構築（利用者環境での適用）
 
-- [ ] 4.1 tfstate 用 S3 バケットを手動作成（バージョニング有効）し、`terraform -chdir=infra init` が成功することを確認
-- [ ] 4.2 `terraform.tfvars` に `domain_name` を記入（gitignore 対象）し、`terraform -chdir=infra plan` が実行できることを確認
-- [ ] 4.3 `terraform -chdir=infra apply -target=aws_acm_certificate.app` で証明書のみ先行作成し、`terraform -chdir=infra output acm_validation_records` で検証レコードが取得できることを確認
-- [ ] 4.4 検証用 CNAME をレジストラの DNS に登録し、`dig <検証レコード名> CNAME` で伝播を確認
-- [ ] 4.5 `terraform -chdir=infra apply` を実行し、証明書が ISSUED になりディストリビューションまで作成されることを確認
-- [ ] 4.6 `terraform -chdir=infra output cloudfront_domain_name` の値を配信サブドメインの CNAME としてレジストラに登録し、`dig <配信サブドメイン> CNAME` で伝播を確認
-- [ ] 4.7 `terraform -chdir=infra plan` を再実行し、`No changes.` であることを確認（spec: 再適用で差分が出ない）
+- [x] 4.1 tfstate 用 S3 バケットを手動作成（バージョニング有効）し、`terraform -chdir=infra init` が成功することを確認
+- [x] 4.2 `terraform.tfvars` に `domain_name` を記入（gitignore 対象）し、`terraform -chdir=infra plan` が実行できることを確認
+- [x] 4.3 `terraform -chdir=infra apply -target=aws_acm_certificate.app` で証明書のみ先行作成し、`terraform -chdir=infra output acm_validation_records` で検証レコードが取得できることを確認
+- [x] 4.4 検証用 CNAME をレジストラの DNS に登録し、`dig <検証レコード名> CNAME` で伝播を確認
+- [x] 4.5 `terraform -chdir=infra apply` を実行し、証明書が ISSUED になりディストリビューションまで作成されることを確認
+- [x] 4.6 `terraform -chdir=infra output cloudfront_domain_name` の値を配信サブドメインの CNAME としてレジストラに登録し、`dig <配信サブドメイン> CNAME` で伝播を確認
+- [x] 4.7 `terraform -chdir=infra plan` を再実行し、`No changes.` であることを確認（spec: 再適用で差分が出ない）
 
 ## 5. デプロイ経路
 
 - [x] 5.1 `scripts/deploy.sh` を作成（`set -euo pipefail`、`terraform output` からバケット名とディストリビューション ID を取得、`npm run build`、ハッシュ付きアセットを `public, max-age=31536000, immutable` で `--delete` 付き同期、エントリポイント 4 種を `no-cache` で個別 `cp`（`[ -f ]` ガード付き・不在時は削除）、エントリポイント 4 パスの無効化（削除がある場合は `/*` を追加）と完了待ち）。`bash -n scripts/deploy.sh` と `shellcheck`（導入済みの場合）が通ることを確認
-- [ ] 5.2 `chmod +x scripts/deploy.sh` を実行し、`./scripts/deploy.sh` でプレースホルダーが配信されることを確認
-- [ ] 5.3 `curl -sI https://<配信サブドメイン>/` で 200・`cache-control: no-cache`・セキュリティヘッダーが返ることを確認
-- [ ] 5.4 `curl -sI http://<オリジンバケットの直 URL>/index.html` が 403 であることを確認（spec: オリジンへの直接アクセスが拒否される）
-- [ ] 5.5 プレースホルダーの文言を 1 行変更して `./scripts/deploy.sh` を再実行し、ブラウザのリロードで変更が反映されることを確認（spec: デプロイ後にリロードで新バージョンが反映される）
+- [x] 5.2 `chmod +x scripts/deploy.sh` を実行し、`./scripts/deploy.sh` でプレースホルダーが配信されることを確認
+- [x] 5.3 `curl -sI https://<配信サブドメイン>/` で 200・`cache-control: no-cache`・セキュリティヘッダーが返ることを確認
+- [x] 5.4 `curl -sI http://<オリジンバケットの直 URL>/index.html` が 403 であることを確認（spec: オリジンへの直接アクセスが拒否される）
+- [x] 5.5 プレースホルダーの文言を 1 行変更して `./scripts/deploy.sh` を再実行し、ブラウザのリロードで変更が反映されることを確認（spec: デプロイ後にリロードで新バージョンが反映される）
 
 ## 6. ドキュメント
 
