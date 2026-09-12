@@ -72,8 +72,9 @@ test.describe('既存メモを持つ状態', () => {
     expect(await readDownload(await settingsPage.export())).toEqual({ ...before, exportedAt: expect.any(String) });
   });
 });
-test('辞書編集で分割単位と重複除去のヘルプを読める', tags('TP-008'), async ({ dictionaries }) => {
-  await dictionaries.open(); await expect(dictionaries.help).toContainText('分割後の単位で登録'); await expect(dictionaries.help).toContainText('1 件に統合');
+test('辞書編集で語全体の登録と重複除去のヘルプを読める', tags('TP-008'), async ({ dictionaries }) => {
+  await dictionaries.open(); await expect(dictionaries.help).toContainText('語全体を登録'); await expect(dictionaries.help).toContainText('1 件に統合');
+  await expect(dictionaries.help).toContainText('空白や句読点を挟んだ語は結合されません');
 });
 test.describe('空の辞書', () => {
   test.use({ classificationSeed: 'seed:dict-all-empty' });

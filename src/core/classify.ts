@@ -6,22 +6,25 @@ interface Entry { quadrant: QuadrantId; raw: string; normalized: string }
 export interface NormalizedDicts {
   exact: Map<string, Entry[]>;
   entries: Entry[];
+  maxEntryLength: number;
 }
 export interface ClassifyResult { quadrant: QuadrantId; matchedEntry: string | null }
 
 export function buildNormalizedDicts(dicts: readonly { quadrant: QuadrantId; entries: readonly string[] }[]): NormalizedDicts {
   const exact = new Map<string, Entry[]>();
   const entries: Entry[] = [];
+  let maxEntryLength = 0;
   for (const dict of dicts) for (const raw of dict.entries) {
     const normalized = normalize(raw);
     if (!normalized) continue;
+    maxEntryLength = Math.max(maxEntryLength, normalized.length);
     const entry = { quadrant: dict.quadrant, raw, normalized };
     entries.push(entry);
     const matches = exact.get(normalized) ?? [];
     matches.push(entry);
     exact.set(normalized, matches);
   }
-  return { exact, entries };
+  return { exact, entries, maxEntryLength };
 }
 
 export function classify(token: string, dicts: NormalizedDicts, partialMatch: boolean): ClassifyResult | null {

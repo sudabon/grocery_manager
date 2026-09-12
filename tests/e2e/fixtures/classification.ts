@@ -11,6 +11,7 @@ export const fixtureNames = [
   'seed:settings-partial-match', 'seed:settings-no-duplicates', 'seed:memos-across-quadrants',
   'seed:quadrant-at-limit', 'seed:quadrant-near-limit', 'seed:dict-custom-labels', 'env:idb-write-failure', 'env:idb-blocked',
   'seed:boards-across-days', 'seed:legacy-memos-without-date',
+  'seed:dict-compound', 'seed:dict-compound-partial',
 ] as const;
 export type ClassificationFixture = typeof fixtureNames[number];
 /** 時刻の扱い。固定しないと日付が変わる瞬間にボードの前提が崩れる（test-plan.md の前提）。 */
@@ -35,6 +36,13 @@ function seedFor(name: ClassificationFixture): DatabaseSeed {
   dictionaries[2].entries = ['牛乳'];
   const seed: DatabaseSeed = { dictionaries, settings: { ...defaultSettings }, memos: [] };
   if (name === 'seed:dict-all-empty') dictionaries.forEach((d) => { d.entries = []; });
+  if (name === 'seed:dict-compound' || name === 'seed:dict-compound-partial') {
+    dictionaries[0].entries = ['むね肉'];
+    dictionaries[1].entries = ['ミニトマト'];
+    dictionaries[2].entries = ['鶏むね肉', 'ヨーグルトドリンク'];
+    dictionaries[3].entries = ['キッチンペーパー'];
+    seed.settings.partialMatch = name === 'seed:dict-compound-partial';
+  }
   if (name === 'seed:dict-overlap-partial') {
     dictionaries[0].entries = ['app']; dictionaries[1].entries = ['apple']; seed.settings.partialMatch = true;
   }

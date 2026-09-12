@@ -7,6 +7,15 @@ const dicts = buildNormalizedDicts([
   { quadrant: 'q1', entries: ['レビュー', 'ＡＢＣ', '牛乳'] },
   { quadrant: 'q4', entries: ['explicit', ' ', 'レビュー'] },
 ]);
+it('辞書が無ければ最長エントリ長は0', () => {
+  expect(buildNormalizedDicts([]).maxEntryLength).toBe(0);
+});
+it.each([
+  [[], 0], [['　', ' '], 0], [['鶏むね肉'], 4],
+  [['ｶﾞｶﾞ', 'ＡＢＣ'], 3], [['㌢'], 3],
+])('最長エントリ長は正規化後の長さ: %j', (entries, length) => {
+  expect(buildNormalizedDicts([{ quadrant: 'q1', entries }]).maxEntryLength).toBe(length);
+});
 it.each([
   ['ﾊﾟﾝ', 'q3', 'パン'], ['ＡＢＣ', 'q1', 'ＡＢＣ'], ['牛乳', 'q1', '牛乳'],
   ['レビュー', 'q1', 'レビュー'], ['ぎゅうにゅう', 'q4', null], ['explicit', 'q4', 'explicit'],

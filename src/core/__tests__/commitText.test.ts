@@ -98,3 +98,34 @@ it('重複OFFで51語すべてが既存重複でも切り捨てを通知する',
   expect(useAppStore.getState().chips).toHaveLength(1);
   expect(notify).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('先頭50件のみ処理しました'));
 });
+
+it.each([50, 51])('結合後の%s語に50件上限を適用する', async (count) => {
+  useAppStore.setState({ normalizedDicts: buildNormalizedDicts([
+    { quadrant: 'q3', entries: ['鶏むね肉'] }, { quadrant: 'q2', entries: ['牛乳'] },
+  ]) });
+  const notify = vi.fn();
+  const words = [...Array(10).fill('鶏むね肉'), ...Array(40).fill('卵')];
+  if (count === 51) words.push('牛乳');
+  await commitText(words.join(' '), notify);
+  const chips = useAppStore.getState().chips;
+  expect(chips).toHaveLength(50);
+  expect(chips.slice(0, 10).map(({ rawText }) => rawText)).toEqual(Array(10).fill('鶏むね肉'));
+  expect(chips.slice(10).map(({ rawText }) => rawText)).toEqual(Array(40).fill('卵'));
+  if (count === 50) expect(notify).not.toHaveBeenCalled();
+  else expect(notify).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('一部のみ登録'));
+});
+
+it('重複OFFでは結合後の正規化文字列で同一コミット内と既存チップの重複を抑止する', async () => {
+  useAppStore.setState({
+    normalizedDicts: buildNormalizedDicts([{ quadrant: 'q3', entries: ['鶏むね肉'] }]),
+    settings: { ...defaultSettings, allowDuplicates: false },
+  });
+  const notify = vi.fn();
+  await commitText('鶏ムネ肉 鶏むね肉', notify);
+  expect(useAppStore.getState().chips).toMatchObject([
+    { rawText: '鶏ムネ肉', normText: '鶏むね肉', quadrant: 'q3', matchedEntry: '鶏むね肉' },
+  ]);
+  await commitText('鶏ﾑﾈ肉', notify);
+  expect(useAppStore.getState().chips).toHaveLength(1);
+  expect(notify).not.toHaveBeenCalled();
+});

@@ -67,7 +67,7 @@ export function DictionariesPage() {
           <span>{dirty ? '未保存の変更があります' : '保存済み'}</span></div>
       </fieldset>
     </section>
-    <p id="dictionary-help" className="help-text">複合語が細かく分割される場合は、分割後の単位で登録してください。正規化して同じになる表記は 1 件に統合され、先に書いた表記が残ります。</p>
+    <p id="dictionary-help" className="help-text">複合語が細かく分割される場合は、1 つのチップにしたい語全体を登録してください。空白や句読点を挟んだ語は結合されません。正規化して同じになる表記は 1 件に統合され、先に書いた表記が残ります。</p>
     <section className="settings-section" aria-label="辞書のバックアップ"><h3>辞書のバックアップ</h3>
       <p>保存済みの 4 象限の辞書を出力します。インポートすると 4 象限の辞書を置き換えます。</p>
       {!dataLoaded && <p className="help-text">端末のデータを読み込めなかったため、出力できるのは現在画面に表示されている内容だけです。復元用のバックアップとしては使わないでください。</p>}

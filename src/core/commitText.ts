@@ -7,10 +7,10 @@ import { normalize } from './normalize';
 
 const nextId = monotonicFactory();
 export async function commitText(text: string, notify: (message: string) => void) {
-  const tokens = tokenize(text);
+  const { normalizedDicts, settings, addChips } = useAppStore.getState();
+  const tokens = tokenize(text, normalizedDicts);
   if (!tokens.length) return;
   const now = Date.now();
-  const { normalizedDicts, settings, addChips } = useAppStore.getState();
   const result = await addChips(tokens.slice(0, 50).flatMap((rawText) => {
     const placement = resolvePlacement(rawText, normalizedDicts, settings.partialMatch);
     return placement ? [{
