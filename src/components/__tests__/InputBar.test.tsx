@@ -5,7 +5,7 @@ import type { InputBar as InputBarType } from '../InputBar';
 // テスト間でリセットしないと実行順に依存するため、毎テストでモジュールを作り直す。
 let InputBar: typeof InputBarType;
 beforeEach(async () => { vi.resetModules(); ({ InputBar } = await import('../InputBar')); });
-afterEach(() => vi.useRealTimers());
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); document.documentElement.style.removeProperty('--keyboard-inset'); });
 it('常時DOMの入力欄を同期表示・focusし、確定後も連続入力できる', () => {
   const commit = vi.fn(); render(<InputBar onCommit={commit} />);
   const input = document.getElementById('memo-input')!;
@@ -71,4 +71,21 @@ it('書き戻しの挿入（選択範囲なし）では残りだけを確定す�
   input.setSelectionRange(0, 0); beforeInput(input, '牛乳、');
   fireEvent.change(input, { target: { value: '牛乳、卵' } }); act(() => vi.advanceTimersByTime(1500));
   expect(commit).toHaveBeenCalledTimes(2); expect(commit).toHaveBeenLastCalledWith('、卵');
+});
+// 閉じている間の入力バーは、常時マウント（同期 focus のため）のままフローから外して高さを持たせない。
+it('閉じている間は入力バーをフローから外し、開くと戻す', () => {
+  render(<InputBar onCommit={vi.fn()} />);
+  const bar = document.getElementById('memo-input-bar')!;
+  expect(bar).toHaveClass('collapsed');
+  fireEvent.click(screen.getByRole('button', { name: '音声メモ開始' })); expect(bar).not.toHaveClass('collapsed');
+  fireEvent.click(screen.getByRole('button', { name: '入力バーを閉じる' })); expect(bar).toHaveClass('collapsed');
+});
+it('入力バーを開いている間だけキーボード分の余白を公開する', () => {
+  vi.stubGlobal('visualViewport', Object.assign(new EventTarget(), { height: 400, offsetTop: 0 }));
+  vi.spyOn(document.documentElement, 'getBoundingClientRect').mockReturnValue({ bottom: 800 } as DOMRect);
+  render(<InputBar onCommit={vi.fn()} />);
+  const inset = () => document.documentElement.style.getPropertyValue('--keyboard-inset');
+  expect(inset()).toBe('');
+  fireEvent.click(screen.getByRole('button', { name: '音声メモ開始' })); expect(inset()).toBe('400px');
+  fireEvent.click(screen.getByRole('button', { name: '入力バーを閉じる' })); expect(inset()).toBe('');
 });

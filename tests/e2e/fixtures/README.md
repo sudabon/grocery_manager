@@ -9,7 +9,7 @@ test-plan.md の「前提(fixture)」列に書いた fixture 名は、必ずこ�
 |-----------|-------------|---------------|------|
 | `seed:dict-compound` | Q1: むね肉、Q2: ミニトマト、Q3: 鶏むね肉・ヨーグルトドリンク、Q4: キッチンペーパー。既定設定・メモ0件 | update-quadmemo-dictionary-tokenization: TP-001〜004, TP-006 | fixture 直接方式 |
 | `seed:dict-compound-partial` | `seed:dict-compound` と同じ辞書・メモ0件、部分一致ON | update-quadmemo-dictionary-tokenization: TP-005 | fixture 直接方式 |
-| `seed:empty-board` | IndexedDB に初期ラベル・空エントリの4辞書、既定設定、メモ0件を投入する (`memo`)。従来の辞書なし前提を維持 | add-quadmemo-quadrant-ui: TP-001〜TP-028 / fix-quadmemo-dictation-writeback: TP-001〜TP-004 | fixture 直接方式 |
+| `seed:empty-board` | IndexedDB に初期ラベル・空エントリの4辞書、既定設定、メモ0件を投入する (`memo`)。従来の辞書なし前提を維持 | add-quadmemo-quadrant-ui: TP-001〜TP-028 / fix-quadmemo-dictation-writeback: TP-001〜TP-004 / fix-quadmemo-input-dock-layout: TP-001〜TP-004 | fixture 直接方式 |
 | `env:no-intl-segmenter` | addInitScript で Intl.Segmenter を無効化して開く (`noSegmenter`) | add-quadmemo-quadrant-ui: TP-012 | fixture 直接方式 |
 | `env:reduced-motion` | reducedMotion: reduce で開く (`reducedMotionBoard`) | add-quadmemo-quadrant-ui: TP-027 | fixture 直接方式 |
 | `env:no-dialog` | showModal を無効化してフォールバックを検証 (`noDialog`) | add-quadmemo-quadrant-ui: TP-026 | fixture 直接方式 |
