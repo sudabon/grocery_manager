@@ -1,8 +1,10 @@
 # continuous-deployment Specification
 
 ## Purpose
-TBD - created by archiving change setup-quadmemo-cd. Update Purpose after archive.
+既定ブランチへ統合された変更を、人手を介さず検証・ビルド・配信・キャッシュ無効化まで到達させる仕組みを定める。配信に用いる資格情報が短期かつ最小権限であることと、検証を通らない変更が配信に到達しないことを合わせて規定する。
+
 ## Requirements
+
 ### Requirement: 既定ブランチへの統合を契機とした自動配信
 
 既定ブランチへ変更が統合されたとき、システムは人手の操作なしに、検証・ビルド・配信物のオリジンへの同期・エントリポイントの配信キャッシュ無効化を順に実行しなければならない（MUST）。配信の手順は手元から実行する場合と同一でなければならない（MUST）。
@@ -73,4 +75,3 @@ TBD - created by archiving change setup-quadmemo-cd. Update Purpose after archiv
 
 - **WHEN** 直列化により待たされた配信が実行される
 - **THEN** その配信は待機開始時点ではなく実行時点の既定ブランチの内容をビルドして配信する
-

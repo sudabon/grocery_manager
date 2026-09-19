@@ -224,7 +224,6 @@ terraform fmt -check -recursive infra
 bash -n scripts/deploy.sh
 npm run test:scripts
 bash scripts/check-test-plan.sh --change setup-quadmemo-hosting
-bash scripts/check-test-plan.sh --change setup-quadmemo-cd
 ```
 
 `verify.yml` はこれらのうち openspec 関連を除いたものを `pull_request` で実行します。`main` への push では `deploy.yml` が `verify.yml` を `workflow_call` で呼ぶため、PR 上のチェック名は `verify / scripts` / `verify / terraform` の形になります。
@@ -238,7 +237,7 @@ bash scripts/check-test-plan.sh --change setup-quadmemo-cd
 - [受け入れ仕様](openspec/changes/setup-quadmemo-hosting/specs/static-hosting/spec.md)
 - [E2E 検証計画](openspec/changes/setup-quadmemo-hosting/test-plan.md)
 - [実装・実環境検証の進捗](openspec/changes/setup-quadmemo-hosting/tasks.md)
-- [継続的デプロイの設計](openspec/changes/setup-quadmemo-cd/design.md) / [受け入れ仕様](openspec/changes/setup-quadmemo-cd/specs/continuous-deployment/spec.md) / [E2E 検証計画](openspec/changes/setup-quadmemo-cd/test-plan.md)
+- [継続的デプロイの仕様](openspec/specs/continuous-deployment/spec.md) / [設計](openspec/changes/archive/2026-09-19-setup-quadmemo-cd/design.md) / [E2E 検証計画](openspec/changes/archive/2026-09-19-setup-quadmemo-cd/test-plan.md)
 
 ## アプリの開発
 
