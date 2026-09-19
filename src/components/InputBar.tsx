@@ -12,7 +12,7 @@ export function InputBar({ onCommit }: { onCommit: (text: string) => void }) {
   const settings = useAppStore((state) => state.settings);
   const inputRef = useRef<HTMLInputElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
-  const dockRef = useVisualViewport();
+  useVisualViewport(open);
   const controller = useCommitController(onCommit, settings.autoCommitMs);
   // 途中結果の範囲置換（選択範囲を持つ beforeinput）は iOS がライブで更新している証拠で、書き戻しは
   // 来ない。React の onBeforeInput は native の beforeinput ではなく textInput 由来なので、直接購読する。
@@ -39,8 +39,10 @@ export function InputBar({ onCommit }: { onCommit: (text: string) => void }) {
       if (settings.showDictationHint && !hintSeen) { setHint(true); hintSeen = true; }
     }
   };
-  return <div className="input-dock" ref={dockRef}>
-    <div id="memo-input-bar" className="input-bar" ref={barRef} style={{ visibility: open ? 'visible' : 'hidden' }}>
+  // 閉じている間の入力バーは visibility で隠すだけでなく collapsed でフローからも外し、ドックの高さをマイクに合わせる。
+  // 表示は focus の前に同期で切り替える必要があるが（iOS）、配置は React のコミットで足りる。
+  return <div className="input-dock">
+    <div id="memo-input-bar" className={`input-bar${open ? '' : ' collapsed'}`} ref={barRef} style={{ visibility: open ? 'visible' : 'hidden' }}>
       {hint && settings.showDictationHint && <p className="dictation-hint" id="dictation-hint">キーボードのマイクキー🎤をタップして話してください</p>}
       <form onSubmit={(event) => { event.preventDefault(); submit(); }}>
         <label className="sr-only" htmlFor="memo-input">メモを入力</label>
