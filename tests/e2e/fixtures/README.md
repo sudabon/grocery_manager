@@ -13,7 +13,8 @@ test-plan.md の「前提(fixture)」列に書いた fixture 名は、必ずこ�
 | `env:no-intl-segmenter` | addInitScript で Intl.Segmenter を無効化して開く (`noSegmenter`) | add-quadmemo-quadrant-ui: TP-012 | fixture 直接方式 |
 | `env:reduced-motion` | reducedMotion: reduce で開く (`reducedMotionBoard`) | add-quadmemo-quadrant-ui: TP-027 | fixture 直接方式 |
 | `env:no-dialog` | showModal を無効化してフォールバックを検証 (`noDialog`) | add-quadmemo-quadrant-ui: TP-026 | fixture 直接方式 |
-| `env:deployed-origin` | `E2E_BASE_URL` の HTTPS 配信先を使用。未指定・HTTP 指定・パス/クエリ/ハッシュを含む指定の場合はネットワークアクセス前に skip。データ変更なし | setup-quadmemo-hosting: TP-001〜TP-006 | fixture 直接方式 |
+| `env:deployed-origin` | `E2E_BASE_URL` の HTTPS 配信先を使用。未指定・HTTP 指定・パス/クエリ/ハッシュを含む指定の場合はネットワークアクセス前に skip。データ変更なし | setup-quadmemo-hosting: TP-001〜TP-006 / setup-quadmemo-cd: TP-001〜TP-002 | fixture 直接方式 |
+| `env:current-build` | 手元の `dist/index.html` を読み、アプリシェルが参照するハッシュ付きアセット（`/assets/<name>-<hash>.<ext>`）のパス一覧を昇順で提供する（`currentBuildAssets`）。`dist/index.html` が存在しない・読めない場合はネットワークアクセス前に skip。データ変更なし | setup-quadmemo-cd: TP-001〜TP-002 | fixture 直接方式 |
 | `seed:fresh-storage` | 新規ブラウザコンテキストの未作成DB。アプリ自身が初期シードを投入 | add-quadmemo-classification: TP-018 | fixture 直接方式 |
 | `seed:dict-basic` | Q1: apple・会議・猫、Q2: ぱん、Q3: 牛乳、Q4: 空。既定設定・メモ0件 | add-quadmemo-classification: TP-001〜006, 011, 013〜015, 020, 023〜024 | fixture 直接方式 |
 | `seed:dict-overlap-partial` | Q1: app、Q2: apple。部分一致ON | add-quadmemo-classification: TP-007 | fixture 直接方式 |
@@ -27,6 +28,9 @@ test-plan.md の「前提(fixture)」列に書いた fixture 名は、必ずこ�
 
 `env:deployed-origin` は `deployed-origin.ts` の自動 fixture `deployedOrigin` が実装する。
 ホスティングのテストは同ファイルの `test` / `expect` を import する。
+`env:current-build` は `current-build.ts` の `currentBuildAssets` が実装し、`deployed-origin.ts` を拡張する。
+CD のテストは同ファイルの `test` / `expect` と、配信側・手元側で共通の抽出関数 `hashedAssetsOf` を import する。
+CD が 1 回以上完走した後、その main と同じコミットで `npm run build` してから実行しないと TP-001 は一致しない。
 
 ## 方式について
 

@@ -3,13 +3,21 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 export AWS_PAGER=""
-bucket="$(terraform -chdir=infra output -raw app_bucket)"
-distribution_id="$(terraform -chdir=infra output -raw cloudfront_distribution_id)"
+# 配信先は環境変数（CD では GitHub Environment の variable）を優先し、両方とも与えられて
+# いれば terraform を呼ばない。CD ジョブへ tfstate の読み取り権限を与えずに済ませるため。
+# 片方でも欠けていれば、欠けている側だけを従来どおり terraform output で補う。
+bucket="${QUADMEMO_APP_BUCKET:-}"
+distribution_id="${QUADMEMO_DISTRIBUTION_ID:-}"
+if [[ -z "$bucket" || -z "$distribution_id" ]]; then
+  bucket="${bucket:-$(terraform -chdir=infra output -raw app_bucket)}"
+  distribution_id="${distribution_id:-$(terraform -chdir=infra output -raw cloudfront_distribution_id)}"
+fi
 
-# --delete の対象は Terraform が出力した配信用バケットのみに限定する。
+# --delete の対象を配信用バケットのみに限定する。解決経路（環境変数 / terraform output）に
+# よらず検証し、別環境の値や打ち間違いを S3 へ触る前に止める。
 if [[ ! "$bucket" =~ ^[a-z][a-z0-9-]{0,39}-app-[0-9]{12}$ ]] ||
    [[ ! "$distribution_id" =~ ^[A-Z0-9]+$ ]]; then
-  echo "Terraform の配信先出力が不正です。初回構築を確認してください。" >&2
+  echo "配信先（バケット名: '${bucket}' / ディストリビューション ID: '${distribution_id}'）が不正です。QUADMEMO_APP_BUCKET / QUADMEMO_DISTRIBUTION_ID か Terraform の出力を確認してください。" >&2
   exit 1
 fi
 

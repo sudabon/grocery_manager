@@ -5,10 +5,12 @@ name: verify
 # 配信 E2E は実際の CloudFront 配信先が必要なため、ここでは実行しない。
 # test-plan と @<change-id> タグの対応（scripts/check-test-plan.sh）は CI では検証せず、
 # 必要なときに手元で --change を指定して実行する。
+#
+# main への push では deploy.yml が workflow_call でこのワークフローを呼び、通過後に配信する。
+# ここで push を契機にすると main で検証が二重に走るため、pull_request と workflow_call だけにする。
 on:
-  push:
-    branches: [main]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
