@@ -60,16 +60,16 @@ IAM 信頼ポリシーの `sub`（1.3）と `deploy.yml` の `environment:`（3.
 ## 7. 初回 CD の実行と検証
 
 - [x] 7.1 1〜6 の変更を PR にし、`verify` が `pull_request` で通ること、および配信が実行されないこと（`deploy.yml` の実行履歴が空であること）を確認する（test-plan.md「変更提案では配信が実行されない」）
-- [ ] 7.2 PR を main へマージし、`deploy.yml` が起動して `verify` → `deploy` の順に成功することを実行履歴で確認する
-- [ ] 7.3 `deploy` ジョブのログで、`configure-aws-credentials` が OIDC でロールを引き受けていること（長期キーを使っていないこと）と、`terraform` が一度も実行されていないことを確認する
-- [ ] 7.4 `npm run build` を手元で実行したうえで `E2E_BASE_URL=https://<配信サブドメイン> npx playwright test --grep @setup-quadmemo-cd` を両プロジェクト（chromium / mobile-safari）で実行し、全件パス（フレーク 0 件）することを確認する
-- [ ] 7.5 アプリシェルに見える変更を 1 つ入れて main へマージし、CD 完走後にブラウザのリロードで反映されることを確認する（spec: デプロイ後にリロードで新バージョンが反映される）
-- [ ] 7.6 `aws cloudfront get-invalidation` または実行ログで、エントリポイント 6 パスの無効化が作成され完了していることを確認する
+- [x] 7.2 PR を main へマージし、`deploy.yml` が起動して `verify` → `deploy` の順に成功することを実行履歴で確認する。実施結果: PR #11 マージ（74e86f8）で run 35429748323 が起動。verify 2 ジョブ成功 → deploy は初回 `Not authorized to perform sts:AssumeRoleWithWebIdentity` で失敗（信頼ポリシーの `sub` が immutable 形式でなかった。1.3 のメモ参照）。AWS 側を修正して失敗ジョブを再実行し success。修正は PR #12（a31788d）として main へ反映し、2 回目の run 35430184538 も verify → deploy の順に success
+- [x] 7.3 `deploy` ジョブのログで、`configure-aws-credentials` が OIDC でロールを引き受けていること（長期キーを使っていないこと）と、`terraform` が一度も実行されていないことを確認する。実施結果: `Assuming role with OIDC` → `Authenticated as assumedRoleId ...:GitHubActions` を確認。deploy ジョブのログに `terraform` は 0 件
+- [x] 7.4 `npm run build` を手元で実行したうえで `E2E_BASE_URL=https://<配信サブドメイン> npx playwright test --grep @setup-quadmemo-cd` を両プロジェクト（chromium / mobile-safari）で実行し、全件パス（フレーク 0 件）することを確認する。実施結果: main（74e86f8）を `npm run build` 後、chromium / mobile-safari の 4 件 passed、リトライなし
+- [x] 7.5 アプリシェルに見える変更を 1 つ入れて main へマージし、CD 完走後にブラウザのリロードで反映されることを確認する（spec: デプロイ後にリロードで新バージョンが反映される）。実施結果: PR #13 で `package.json` を 0.2.0 に上げてマージ（42e3f39、run 35430281513 success）。配信ドメインの `/settings` を chromium / webkit で開きリロード → `バージョン 0.1.0` から `バージョン 0.2.0` に変わることを確認
+- [x] 7.6 `aws cloudfront get-invalidation` または実行ログで、エントリポイント 6 パスの無効化が作成され完了していることを確認する。実施結果: 2 回目の CD（削除アセットなし）の無効化 `I40O7KG4X0H4A79DJHHNCRF1GL` がエントリポイント 6 パスちょうどで Completed。初回は旧 JS の削除を伴ったため設計どおり `/*`（`IA2ZGM0K2YJ6I0DZN2DC1E6LH7`、Completed）
 
 ## 8. 検証
 
 - [x] 8.1 `npm run build` / `npm test` / `npm run test:scripts` が全件パスすることを確認する
 - [x] 8.2 `terraform fmt -check -recursive infra` が差分ゼロ、`terraform -chdir=infra init -backend=false && terraform -chdir=infra validate` が exit 0 であることを確認する
 - [x] 8.3 `terraform -chdir=infra plan` が `No changes.` であることを確認する（apply 後の冪等性）
-- [ ] 8.4 `E2E_BASE_URL` を設定した状態で `npx playwright test` の全件実行を行い、既存観点（特に `setup-quadmemo-hosting`）に回帰が無いことを確認する
+- [x] 8.4 `E2E_BASE_URL` を設定した状態で `npx playwright test` の全件実行を行い、既存観点（特に `setup-quadmemo-hosting`）に回帰が無いことを確認する。実施結果: main（42e3f39）で 321 passed / 0 failed / 0 flaky（chromium / mobile-safari / pwa）
 - [x] 8.5 `openspec validate setup-quadmemo-cd` が成功し、`git diff --check` に差分が無いことを確認する
