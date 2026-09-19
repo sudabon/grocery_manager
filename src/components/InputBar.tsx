@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useCommitController } from '../hooks/useCommitController';
 import { useVisualViewport } from '../hooks/useVisualViewport';
 import { useAppStore } from '../store/useAppStore';
@@ -14,6 +14,15 @@ export function InputBar({ onCommit }: { onCommit: (text: string) => void }) {
   const barRef = useRef<HTMLDivElement>(null);
   const dockRef = useVisualViewport();
   const controller = useCommitController(onCommit, settings.autoCommitMs);
+  // 途中結果の範囲置換（選択範囲を持つ beforeinput）は iOS がライブで更新している証拠で、書き戻しは
+  // 来ない。React の onBeforeInput は native の beforeinput ではなく textInput 由来なので、直接購読する。
+  const reset = controller.reset;
+  useEffect(() => {
+    const input = inputRef.current!;
+    const onBeforeInput = () => { if (input.selectionStart !== input.selectionEnd) reset(); };
+    input.addEventListener('beforeinput', onBeforeInput);
+    return () => input.removeEventListener('beforeinput', onBeforeInput);
+  }, [reset]);
   const submit = () => { controller.commit(); inputRef.current?.focus({ preventScroll: true }); };
   const toggle = () => {
     if (open) {
@@ -40,7 +49,9 @@ export function InputBar({ onCommit }: { onCommit: (text: string) => void }) {
           onChange={(event) => controller.change(event.currentTarget.value)}
           onCompositionStart={controller.compositionStart}
           onCompositionEnd={(event) => controller.compositionEnd(event.currentTarget.value)}
+          onBlur={controller.reset}
           onKeyDown={(event) => {
+            controller.reset();
             if (event.key === 'Enter' && (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || controller.isComposing())) event.preventDefault();
           }} />
         <button type="submit" className="commit-button" onPointerDown={(event) => event.preventDefault()}>確定</button>
