@@ -10,6 +10,14 @@ resource "aws_iam_openid_connect_provider" "github" {
   client_id_list = ["sts.amazonaws.com"]
 }
 
+locals {
+  # GitHub の OIDC トークンの sub の接頭辞。2026-07-15 以降に作成されたリポジトリは
+  # owner / repo の数値 ID を含む immutable 形式（repo:OWNER@OWNER-ID/REPO@REPO-ID）になり、
+  # 名前だけの repo:OWNER/REPO では一致しない。ID は改名・移管でも変わらず、
+  # gh api repos/sudabon/grocery_manager --jq '"\(.owner.id) \(.id)"' で確認できる。
+  github_repository_subject = "repo:sudabon@140196/grocery_manager@1360775157"
+}
+
 # 信頼範囲は sub の完全一致で「このリポジトリの、この Environment」に限定する。
 # environment: を宣言したジョブの sub にブランチ名は現れないため、「main からのみ」は
 # GitHub Environment の deployment branch 制限で担保する（README「継続的デプロイ」）。
@@ -33,7 +41,7 @@ data "aws_iam_policy_document" "github_actions_deploy_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:sudabon/grocery_manager:environment:production"]
+      values   = ["${local.github_repository_subject}:environment:production"]
     }
   }
 }
