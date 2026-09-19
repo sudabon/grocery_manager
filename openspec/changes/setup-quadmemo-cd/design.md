@@ -75,8 +75,10 @@ tfstate を読む案は値の二重管理が起きない利点があるが、CD 
 Environment の変数を読むにはジョブが `environment: production` を宣言する必要があり、宣言すると OIDC トークンの `sub` は次の形になる。
 
 ```
-repo:sudabon/grocery_manager:environment:production
+repo:sudabon@140196/grocery_manager@1360775157:environment:production
 ```
+
+（実装時に判明: 2026-07-15 以降に作成されたリポジトリは owner / repo の数値 ID を含む immutable 形式が既定で、名前だけの `repo:sudabon/grocery_manager:...` では一致しない。ID は改名・移管でも変わらないため、完全一致の方針はそのまま成立する）
 
 ブランチ名は `sub` に現れない。IAM の信頼ポリシーで参照できる条件キーは `token.actions.githubusercontent.com:sub` と `:aud` だけなので、**「main からのみ」は IAM では表現できない**。そこで責務を分ける。
 

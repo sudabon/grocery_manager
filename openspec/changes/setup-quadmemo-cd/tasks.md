@@ -5,7 +5,7 @@ IAM 信頼ポリシーの `sub`（1.3）と `deploy.yml` の `environment:`（3.
 
 - [x] 1.1 apply の前に `aws iam list-open-id-connect-providers` を実行し、`token.actions.githubusercontent.com` のプロバイダが既に存在するかを確認する。存在する場合は 1.2 の作成ではなく `terraform import` で取り込む方針に切り替える（design.md - D5）。実施結果: 既存プロバイダ無し（`[]`）→ 新規作成
 - [x] 1.2 `infra/github_oidc.tf` に `aws_iam_openid_connect_provider.github` を定義する（`url = "https://token.actions.githubusercontent.com"`、`client_id_list = ["sts.amazonaws.com"]`、`thumbprint_list` は指定しない）。`terraform -chdir=infra validate` が通ることを確認
-- [x] 1.3 同ファイルに `aws_iam_role.github_actions_deploy` を定義する。信頼ポリシーは `aws_iam_policy_document` で書き、`Federated` にプロバイダ ARN、条件を `token.actions.githubusercontent.com:aud` = `sts.amazonaws.com`（StringEquals）と `token.actions.githubusercontent.com:sub` = `repo:sudabon/grocery_manager:environment:production`（StringEquals、ワイルドカード禁止）にする（design.md - D3）。`terraform -chdir=infra validate` が通ることを確認
+- [x] 1.3 同ファイルに `aws_iam_role.github_actions_deploy` を定義する。信頼ポリシーは `aws_iam_policy_document` で書き、`Federated` にプロバイダ ARN、条件を `token.actions.githubusercontent.com:aud` = `sts.amazonaws.com`（StringEquals）と `token.actions.githubusercontent.com:sub` = `repo:sudabon/grocery_manager:environment:production`（StringEquals、ワイルドカード禁止）にする（design.md - D3）。`terraform -chdir=infra validate` が通ることを確認。実施メモ: 初回 CD が `Not authorized to perform sts:AssumeRoleWithWebIdentity` で失敗。CloudTrail で実際の `sub` が immutable 形式 `repo:sudabon@140196/grocery_manager@1360775157:environment:production` であることを確認し、その値に修正した
 - [x] 1.4 同ファイルに最小権限のインラインポリシーを定義する。design.md - D6 の対応表どおり、`s3:ListBucket` を `aws_s3_bucket.app.arn`、`s3:GetObject` / `s3:PutObject` / `s3:DeleteObject` を `"${aws_s3_bucket.app.arn}/*"`、`cloudfront:CreateInvalidation` / `cloudfront:GetInvalidation` を `aws_cloudfront_distribution.app.arn` に限定する（ARN は式で参照し、文字列を書かない）
 - [x] 1.5 `infra/outputs.tf` に `github_actions_deploy_role_arn` を追加する（description に「GitHub Environment の `AWS_ROLE_ARN` へ写す値」と明記）
 - [x] 1.6 `terraform fmt -check -recursive infra` と `terraform -chdir=infra init -backend=false && terraform -chdir=infra validate` が差分ゼロ・exit 0 であることを確認する（verify.yml の terraform ジョブと同じ検証）
@@ -59,7 +59,7 @@ IAM 信頼ポリシーの `sub`（1.3）と `deploy.yml` の `environment:`（3.
 
 ## 7. 初回 CD の実行と検証
 
-- [ ] 7.1 1〜6 の変更を PR にし、`verify` が `pull_request` で通ること、および配信が実行されないこと（`deploy.yml` の実行履歴が空であること）を確認する（test-plan.md「変更提案では配信が実行されない」）
+- [x] 7.1 1〜6 の変更を PR にし、`verify` が `pull_request` で通ること、および配信が実行されないこと（`deploy.yml` の実行履歴が空であること）を確認する（test-plan.md「変更提案では配信が実行されない」）
 - [ ] 7.2 PR を main へマージし、`deploy.yml` が起動して `verify` → `deploy` の順に成功することを実行履歴で確認する
 - [ ] 7.3 `deploy` ジョブのログで、`configure-aws-credentials` が OIDC でロールを引き受けていること（長期キーを使っていないこと）と、`terraform` が一度も実行されていないことを確認する
 - [ ] 7.4 `npm run build` を手元で実行したうえで `E2E_BASE_URL=https://<配信サブドメイン> npx playwright test --grep @setup-quadmemo-cd` を両プロジェクト（chromium / mobile-safari）で実行し、全件パス（フレーク 0 件）することを確認する

@@ -155,7 +155,7 @@ CD は長期のアクセスキーを持ちません。`infra/github_oidc.tf` の
 |------|---------|
 | `main` への push でしか起動しない | `deploy.yml` の `on` |
 | Environment `production` を使えるのは `main` のみ | GitHub Environment の deployment branch 制限 |
-| このリポジトリの、この Environment からのみロールを引ける | IAM 信頼ポリシー（`sub` = `repo:sudabon/grocery_manager:environment:production` の完全一致） |
+| このリポジトリの、この Environment からのみロールを引ける | IAM 信頼ポリシー（`sub` = `repo:sudabon@140196/grocery_manager@1360775157:environment:production` の完全一致。2026-07-15 以降に作成されたリポジトリは owner / repo の数値 ID を含む immutable 形式になる） |
 
 ### GitHub 側の設定
 
