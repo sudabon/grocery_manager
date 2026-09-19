@@ -1,0 +1,47 @@
+name: deploy
+
+# main へ push された内容を、verify.yml の検証を通過してから配信する（承認ゲートは無い）。
+# 配信手順は手元の bash scripts/deploy.sh と同一。配信先は GitHub Environment `production` の
+# variable から受け取り、CD では terraform を実行しない（tfstate の読み取り権限を持たない）。
+# 「main からのみ」は、この on / Environment の deployment branch 制限 / IAM 信頼ポリシーの
+# sub 完全一致、の 3 つが独立に効く（infra/github_oidc.tf、README「継続的デプロイ」）。
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# 同時に 2 つ配信しない。実行中の同期を途中で殺すと一部だけ入れ替わった配信が残るため、
+# 打ち切らずに待たせる。待った実行は最新の main をビルドするので古い内容は配信されない。
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    # OIDC トークンの発行はこのジョブだけに許可する。
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - run: bash scripts/deploy.sh
+        env:
+          QUADMEMO_APP_BUCKET: ${{ vars.QUADMEMO_APP_BUCKET }}
+          QUADMEMO_DISTRIBUTION_ID: ${{ vars.QUADMEMO_DISTRIBUTION_ID }}

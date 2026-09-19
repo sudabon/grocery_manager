@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-async function runDeploy(t, config = {}, { hasRemovedAssetsStub } = {}) {
+async function runDeploy(t, config = {}, { hasRemovedAssetsStub, env = {} } = {}) {
   // 空白を含む作業パスでも動作することを含めて確認する。
   const root = await mkdtemp(join(tmpdir(), 'quadmemo deploy-'));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -25,19 +25,28 @@ async function runDeploy(t, config = {}, { hasRemovedAssetsStub } = {}) {
     await chmod(path, 0o755);
   }
   const log = join(root, 'commands.jsonl');
+  // 配信先の環境変数は .env を読み込んだシェルから漏れ込むため、テストが与えたものだけを渡す。
+  const { QUADMEMO_APP_BUCKET, QUADMEMO_DISTRIBUTION_ID, ...baseEnv } = process.env;
   const result = spawnSync('bash', [join(app, 'scripts/deploy.sh')], {
     cwd: root,
     encoding: 'utf8',
     timeout: 15000,
-    env: { ...process.env, PATH: bin + ':' + process.env.PATH,
-      DEPLOY_MOCK_CONFIG: JSON.stringify(config), DEPLOY_MOCK_LOG: log },
+    env: { ...baseEnv, PATH: bin + ':' + process.env.PATH,
+      DEPLOY_MOCK_CONFIG: JSON.stringify(config), DEPLOY_MOCK_LOG: log, ...env },
   });
   assert.ifError(result.error);
-  const calls = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  // 外部コマンドを一度も呼ばずに中止した場合はログ自体が作られない。
+  const logged = await readFile(log, 'utf8').catch(error => {
+    if (error.code === 'ENOENT') return '';
+    throw error;
+  });
+  const calls = logged.trim() === '' ? [] : logged.trim().split('\n').map(line => JSON.parse(line));
   return { ...result, calls };
 }
 
 const awsCalls = result => result.calls.filter(call => call.command === 'aws').map(call => call.args);
+const terraformCalls = result =>
+  result.calls.filter(call => call.command === 'terraform').map(call => call.args);
 
 const ICONS = ['icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon-180.png'];
 const ENTRYPOINTS = ['index.html', 'sw.js', 'manifest.webmanifest', ...ICONS];
@@ -164,8 +173,8 @@ for (const [name, config, stderrPattern] of [
   ['ビルド失敗', { buildFails: true }],
   ['空の index.html', { files: { 'index.html': '' } }, /index\.html が存在しないか/],
   ['index.html のないビルド', { files: { 'assets/app.js': 'app' } }, /index\.html が存在しないか/],
-  ['不正な配信先', { bucket: 'unrelated-bucket' }, /配信先出力が不正です/],
-  ['不正なディストリビューション ID', { distributionId: 'invalid-id!' }, /配信先出力が不正です/],
+  ['不正な配信先', { bucket: 'unrelated-bucket' }, /配信先.*が不正です/],
+  ['不正なディストリビューション ID', { distributionId: 'invalid-id!' }, /配信先.*が不正です/],
 ]) {
   test(`${name}では AWS の同期・削除を実行しない`, async t => {
     const result = await runDeploy(t, config);
@@ -175,6 +184,77 @@ for (const [name, config, stderrPattern] of [
     if (stderrPattern) assert.match(result.stderr, stderrPattern);
   });
 }
+
+const DESTINATION_ENV = {
+  QUADMEMO_APP_BUCKET: 'quadmemo-app-210987654321',
+  QUADMEMO_DISTRIBUTION_ID: 'EXPLICIT1',
+};
+
+test('配信先を環境変数で与えると terraform を呼ばず、その値へ同期・無効化する', async t => {
+  const result = await runDeploy(t, {}, { env: DESTINATION_ENV });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(terraformCalls(result), []);
+  const calls = awsCalls(result);
+  assert.equal(calls.find(args => args[1] === 'sync')?.[3], 's3://quadmemo-app-210987654321/');
+  assert.ok(calls.filter(args => args[1] === 'cp' || args[1] === 'rm')
+    .every(args => args.some(arg => arg.startsWith('s3://quadmemo-app-210987654321/'))));
+  assert.equal(calls.find(args => args[0] === 's3api')?.[3], 'quadmemo-app-210987654321');
+  const invalidation = invalidationOf(result);
+  assert.equal(invalidation[invalidation.indexOf('--distribution-id') + 1], 'EXPLICIT1');
+  assert.deepEqual(calls.at(-1).slice(0, 5),
+    ['cloudfront', 'wait', 'invalidation-completed', '--distribution-id', 'EXPLICIT1']);
+  assert.match(result.stdout, /Deployed to s3:\/\/quadmemo-app-210987654321 \(distribution: EXPLICIT1\)/);
+});
+
+test('配信先の環境変数が無ければ従来どおり terraform output を 2 回呼ぶ', async t => {
+  const result = await runDeploy(t);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(terraformCalls(result), [
+    ['-chdir=infra', 'output', '-raw', 'app_bucket'],
+    ['-chdir=infra', 'output', '-raw', 'cloudfront_distribution_id'],
+  ]);
+});
+
+// 片方だけ与えたときは、欠けている側だけを terraform output で補う（design.md - D2）。
+for (const [name, env, expectedOutput, expectedBucket, expectedDistribution] of [
+  ['バケット名だけ', { QUADMEMO_APP_BUCKET: DESTINATION_ENV.QUADMEMO_APP_BUCKET },
+    'cloudfront_distribution_id', 'quadmemo-app-210987654321', 'E123ABC'],
+  ['ディストリビューション ID だけ', { QUADMEMO_DISTRIBUTION_ID: DESTINATION_ENV.QUADMEMO_DISTRIBUTION_ID },
+    'app_bucket', 'quadmemo-app-123456789012', 'EXPLICIT1'],
+]) {
+  test(`${name}を環境変数で与えると、欠けている側だけを terraform output で補う`, async t => {
+    const result = await runDeploy(t, {}, { env });
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(terraformCalls(result), [['-chdir=infra', 'output', '-raw', expectedOutput]]);
+    assert.match(result.stdout,
+      new RegExp(`Deployed to s3://${expectedBucket} \\(distribution: ${expectedDistribution}\\)`));
+  });
+}
+
+// 環境変数で与えた配信先にも形式チェックを適用し、S3 に触れる前に止める。
+for (const [name, env] of [
+  ['形式に合わないバケット名', { ...DESTINATION_ENV, QUADMEMO_APP_BUCKET: 'not-a-bucket' }],
+  ['小文字を含むディストリビューション ID', { ...DESTINATION_ENV, QUADMEMO_DISTRIBUTION_ID: 'e123abc' }],
+  ['空白を含むバケット名', { ...DESTINATION_ENV, QUADMEMO_APP_BUCKET: 'quadmemo-app-123456789012 x' }],
+]) {
+  test(`環境変数の配信先が不正（${name}）ならデプロイを中止する`, async t => {
+    const result = await runDeploy(t, {}, { env });
+    assert.notEqual(result.status, 0);
+    assert.deepEqual(awsCalls(result), []);
+    assert.deepEqual(terraformCalls(result), []);
+    assert.match(result.stderr, /配信先.*が不正です/);
+    assert.match(result.stderr, /QUADMEMO_APP_BUCKET \/ QUADMEMO_DISTRIBUTION_ID/);
+    assert.doesNotMatch(result.stdout, /Deployed to/);
+  });
+}
+
+test('環境変数で配信先を与えても、空の index.html では AWS へ触れずに中止する', async t => {
+  const result = await runDeploy(t, { files: { 'index.html': '' } }, { env: DESTINATION_ENV });
+  assert.equal(result.status, 1);
+  assert.deepEqual(awsCalls(result), []);
+  assert.match(result.stderr, /index\.html が存在しないか/);
+  assert.doesNotMatch(result.stdout, /Deployed to/);
+});
 
 test('不正なオブジェクト一覧では同期前に停止する', async t => {
   const result = await runDeploy(t, { malformedList: true });

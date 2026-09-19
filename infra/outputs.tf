@@ -24,3 +24,8 @@ output "app_bucket" {
   description = "ビルド成果物を配置する非公開 S3 バケット名"
   value       = aws_s3_bucket.app.id
 }
+
+output "github_actions_deploy_role_arn" {
+  description = "GitHub Environment `production` の variable `AWS_ROLE_ARN` へ写す値（CD が引き受けるデプロイ用ロール）"
+  value       = aws_iam_role.github_actions_deploy.arn
+}

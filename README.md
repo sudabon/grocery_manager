@@ -47,6 +47,8 @@ set -a; . ./.env; set +a
 | `AWS_REGION` | 配信用 S3 のリージョン（既定 `ap-northeast-1`） |
 | `QUADMEMO_TFSTATE_BUCKET` | tfstate を置く S3 バケット名。S3 の名前空間はグローバルに一意なので、他と衝突しない名前を選ぶ |
 | `TF_VAR_domain_name` | 配信用サブドメインの FQDN。ラベルを 3 つ以上含むもの（`infra/variables.tf` の検証条件を参照） |
+| `QUADMEMO_APP_BUCKET` | 任意。配信用バケット名。`QUADMEMO_DISTRIBUTION_ID` と両方指定すると `deploy.sh` は `terraform output` を参照しない（CD では Environment の variable から渡る） |
+| `QUADMEMO_DISTRIBUTION_ID` | 任意。対象 CloudFront ディストリビューション ID。上記と対で指定する |
 | `E2E_BASE_URL` | 既存プロジェクトの配信 E2E の対象。`TF_VAR_domain_name` と同じホストを `https://` で指定し、dev の自動起動を省く |
 | `E2E_PWA_BASE_URL` | `pwa` プロジェクトの対象 URL。指定時は preview の自動起動を省く。配信先で PWA を検証する場合はその URL を指定する |
 
@@ -126,11 +128,11 @@ terraform -chdir=infra plan
 ./scripts/deploy.sh
 ```
 
-Terraform の出力から配信先を取得し、ビルド → S3 同期 → 無効化完了待ちまで実行します。ビルド失敗や空の `index.html` ではアップロードしません。
+配信先（バケット名・ディストリビューション ID）は `QUADMEMO_APP_BUCKET` / `QUADMEMO_DISTRIBUTION_ID` が両方与えられていればそれを使い、無ければ Terraform の出力から取得します（片方だけなら欠けている側を出力で補います）。どちらの経路でも形式チェックを通し、ビルド → S3 同期 → 無効化完了待ちまで実行します。ビルド失敗や空の `index.html` ではアップロードしません。
 
 `sync --delete` で古いアセットを削除します。`index.html` / `sw.js` / `manifest.webmanifest` は `no-cache` で個別アップロードし、成果物に存在しないものは S3 から削除します（S3 に実在するものを消すときは stderr へ警告します）。固定名のアイコン 3 ファイルも同様に扱います。通常はこれら 6 パスを無効化し、削除がある場合は `/*` 1 パスに置き換えて古いファイルが CDN に残らないようにします。エントリポイントが空、または通常ファイルでない場合は同期前にデプロイを中止します。
 
-デプロイ権限は配信用バケットの一覧取得・書き込み・削除、対象 CloudFront の無効化作成・完了照会、および Terraform 出力を読むための tfstate 読み取りが必要です。AWS の課金条件は利用アカウントの現行プランで確認してください。
+デプロイ権限は配信用バケットの一覧取得・書き込み・削除、対象 CloudFront の無効化作成・完了照会が必要です。配信先を環境変数で与えない場合は、Terraform 出力を読むための tfstate 読み取りも必要です。AWS の課金条件は利用アカウントの現行プランで確認してください。
 
 ```bash
 curl -sI "https://$TF_VAR_domain_name/"
@@ -140,6 +142,66 @@ curl -sI "http://$TF_VAR_domain_name/"
 HTTPS は 200、`Cache-Control: no-cache`、`X-Content-Type-Options: nosniff`、HSTS、`X-Frame-Options` を確認します。HTTP は HTTPS へのリダイレクトを確認します。`terraform -chdir=infra output -raw app_bucket` で取得したバケット名を用い、`http://<バケット名>.s3.ap-northeast-1.amazonaws.com/index.html` への匿名アクセスが 403 になることも確認します。
 
 更新確認はアプリの本文を 1 行変更して再デプロイし、ルートと `/settings` のリロードで変更を確認します。削除確認は不要になった検証用ファイルを成果物から削除して再デプロイし、`aws s3 ls` で削除を確認します。SPA フォールバックがあるため、削除 URL は 404 ではなくアプリシェルの 200 になります。ハッシュ付きアセット導入後は `aws s3api head-object --bucket <バケット名> --key <アセットのキー>` で長期キャッシュヘッダーも確認します。
+
+## 継続的デプロイ
+
+`main` へマージされた内容は、`.github/workflows/deploy.yml` が人手を介さず配信まで到達させます。承認ゲートはありません（PR のマージが確認の場です）。流れは `verify.yml` の検証（`workflow_call` で呼び出し）→ `npm ci` → OIDC で AWS のロールを引き受け → `bash scripts/deploy.sh` で、配信手順は手元実行と同一です。検証が 1 つでも失敗すると配信は起動しません。同時に 2 つの配信は走らず、実行中の配信は打ち切らずに完了を待ってから次を実行します。手元からの `bash scripts/deploy.sh` は従来どおり使えます。
+
+CD は長期のアクセスキーを持ちません。`infra/github_oidc.tf` の OIDC プロバイダとロール `quadmemo-github-actions-deploy` を、ジョブごとに発行される短期資格情報で引き受けます。ロールの権限は配信用バケットのオブジェクト一覧・取得・作成・削除と、対象ディストリビューションの無効化作成・参照に限られ、tfstate は読めません。そのため配信先は Terraform の出力ではなく、GitHub Environment の variable から `deploy.sh` に渡します。CD は `terraform` を実行しません。インフラ変更は引き続き手元から `terraform -chdir=infra apply` します。
+
+「`main` からのみ配信する」は次の 3 つが独立に効き、1 つの設定漏れでは配信に到達しません。
+
+| 制限 | 置き場所 |
+|------|---------|
+| `main` への push でしか起動しない | `deploy.yml` の `on` |
+| Environment `production` を使えるのは `main` のみ | GitHub Environment の deployment branch 制限 |
+| このリポジトリの、この Environment からのみロールを引ける | IAM 信頼ポリシー（`sub` = `repo:sudabon/grocery_manager:environment:production` の完全一致） |
+
+### GitHub 側の設定
+
+Environment・variable・deployment branch 制限は Terraform の管理外で、GitHub の設定画面または `gh` CLI で行います。Terraform の GitHub provider は認証に長期の PAT を要し、長期アクセスキーを減らすという CD の動機と衝突するため使いません。
+
+1. `terraform -chdir=infra apply` でロールを作成し、次の 3 値を控えます。
+
+   ```bash
+   terraform -chdir=infra output -raw github_actions_deploy_role_arn
+   terraform -chdir=infra output -raw app_bucket
+   terraform -chdir=infra output -raw cloudfront_distribution_id
+   ```
+
+2. リポジトリに Environment `production` を作成し、deployment branch 制限を `main` のみにします。
+
+   ```bash
+   gh api -X PUT repos/sudabon/grocery_manager/environments/production \
+     --input - <<'JSON'
+   {"deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}
+   JSON
+   gh api -X POST repos/sudabon/grocery_manager/environments/production/deployment-branch-policies \
+     -f name=main -f type=branch
+   ```
+
+3. Environment `production` に次の 4 つを **variable**（secret ではない）として登録します。
+
+   | variable | 写す値 |
+   |----------|--------|
+   | `AWS_ROLE_ARN` | `terraform output -raw github_actions_deploy_role_arn` |
+   | `AWS_REGION` | `ap-northeast-1` |
+   | `QUADMEMO_APP_BUCKET` | `terraform output -raw app_bucket` |
+   | `QUADMEMO_DISTRIBUTION_ID` | `terraform output -raw cloudfront_distribution_id` |
+
+   ```bash
+   gh variable set AWS_ROLE_ARN --env production --body "$(terraform -chdir=infra output -raw github_actions_deploy_role_arn)"
+   gh variable set AWS_REGION --env production --body ap-northeast-1
+   gh variable set QUADMEMO_APP_BUCKET --env production --body "$(terraform -chdir=infra output -raw app_bucket)"
+   gh variable set QUADMEMO_DISTRIBUTION_ID --env production --body "$(terraform -chdir=infra output -raw cloudfront_distribution_id)"
+   gh variable list --env production
+   ```
+
+Environment 名を変える場合は、`infra/github_oidc.tf` の信頼ポリシーの `sub` と `deploy.yml` の `environment:` を同時に揃えてください。
+
+**`terraform apply` で配信先（バケットまたはディストリビューション）を作り直したら、`QUADMEMO_APP_BUCKET` / `QUADMEMO_DISTRIBUTION_ID` も更新してください。** 古い値のままだと形式チェックは通りますが、ロールの権限は新しいリソースに限定されるため、配信は `AccessDenied` で失敗します（誤ったバケットへ配信されることはありません）。
+
+ロールバックは戻したいコミットへ `git revert` して `main` へ push します。CD がそのまま再デプロイの経路になります。
 
 ## 検証
 
@@ -162,7 +224,10 @@ terraform fmt -check -recursive infra
 bash -n scripts/deploy.sh
 npm run test:scripts
 bash scripts/check-test-plan.sh --change setup-quadmemo-hosting
+bash scripts/check-test-plan.sh --change setup-quadmemo-cd
 ```
+
+`verify.yml` はこれらのうち openspec 関連を除いたものを `pull_request` で実行します。`main` への push では `deploy.yml` が `verify.yml` を `workflow_call` で呼ぶため、PR 上のチェック名は `verify / scripts` / `verify / terraform` の形になります。
 
 `npm run test:scripts` は `tests/scripts/` のスクリプト検証を実行します。`check-test-plan.sh` は引数なしなら `origin/main...HEAD` の差分を確認しますが、`openspec/` が git 管理下にない間は差分ベースの検証が成立しないため exit 2 になります。`check-test-plan.sh` は CI では実行しません（進行中の change が無い期間はすべての PR が exit 2 になるため）。必要なときに手元で実行してください。差分モードは新規チェックアウトと同じ結果になるよう `HEAD` のコミット済みツリーを参照するため、未追跡のまま残った `test-plan.md` や E2E テストはコミット漏れとして報告します。未コミットの change を確認する場合は、作業ツリーを参照する `--change` を使います。`tasks.md` にチェック済みタスクが 1 つも無い未着手の change は、実装が存在しないため `@<change-id>` の E2E テストを要求せず `Pending:` として報告します（`test-plan.md` は提案時の成果物なので必須です）。1 つでもチェックが付いた時点で E2E タグが必須になります。Terraform の backend 無効での検証後、実環境へ適用する際は通常の `terraform init` を実行してください。
 
@@ -173,6 +238,7 @@ bash scripts/check-test-plan.sh --change setup-quadmemo-hosting
 - [受け入れ仕様](openspec/changes/setup-quadmemo-hosting/specs/static-hosting/spec.md)
 - [E2E 検証計画](openspec/changes/setup-quadmemo-hosting/test-plan.md)
 - [実装・実環境検証の進捗](openspec/changes/setup-quadmemo-hosting/tasks.md)
+- [継続的デプロイの設計](openspec/changes/setup-quadmemo-cd/design.md) / [受け入れ仕様](openspec/changes/setup-quadmemo-cd/specs/continuous-deployment/spec.md) / [E2E 検証計画](openspec/changes/setup-quadmemo-cd/test-plan.md)
 
 ## アプリの開発
 
